@@ -13,7 +13,7 @@
 
 ## Known limitations
 
-- Authentication is local bearer-token authentication for Codex and Claude Code. The service is not a remote ChatGPT endpoint.
+- Authentication is local bearer-token authentication, with one principal per client (`codex`, `claude-code`, and an optional `chatgpt`). The service has no public endpoint; a ChatGPT connection goes through an OpenAI Secure MCP Tunnel that adds the `chatgpt` token on loopback.
 - The 4k profile reserves 1024 completion tokens and has about 2.5 KB of usable current input before history; larger contexts may need substantial memory and inference time.
 - Run one server process. Admission control and per-conversation locks are in memory.
 - Some models (including Qwen3.5) ignore the request's `num_ctx`, so each profile must map to its own model variant whose window is at least the profile's budget. A tag that does not pin `num_ctx` (such as the base `qwen3.5:9b` used for `4k`) cannot be fully verified and produces a warning.
@@ -25,7 +25,7 @@
 
 ## External blockers
 
-- ChatGPT integration requires an authorized remote endpoint, a verified authentication design, and an eligible ChatGPT workspace. Local loopback checks do not establish that integration.
+- ChatGPT integration is documented (`docs/integrations/local-clients.md`) but unverified: it needs an OpenAI Platform tunnel and runtime key, a ChatGPT plan and role that allow Developer mode and custom apps, and a live run of the test table in that guide (SB-054). Local loopback checks do not establish that integration.
 - The example systemd unit and retention timer are provided, but systemd startup, restart, shutdown, and timer execution were not validated in this environment.
 
 ## Verification summary
@@ -33,4 +33,4 @@
 - `uv sync --locked`, Ruff lint and format checks, the mocked pytest suite, and `scripts/check_todo_integrity.py` pass. Final results for the release commit are recorded in `docs/REMEDIATION_2_TODO.md` (RM2-040).
 - On 2026-10-26, after the context-window check (`d41ebd0`): mocked suite 202 passed and 1 skipped (the opt-in live test), the opt-in live test passed again, and a live `check-config` passed with one warning for the unpinned `4k` tag. Earlier, against code commit `04bf04a`: mocked suite 193 passed and 1 skipped; the opt-in live test passed (real Ollama, conversation, process restart, cross-principal denial, exact error text); and MCP Inspector CLI confirmed both tools, the `mode` enum, and the exact `invalid_input: question must not be empty` error.
 - `4k`, `128k`, and `256k` were re-measured live on 2026-10-26: 2,274 ms (100% GPU), 3,521 ms (100% GPU), and 4,177 ms (7%/93% CPU/GPU) respectively.
-- ChatGPT remote integration and a live systemd lifecycle remain unverified external blockers.
+- A live ChatGPT connection, the tunnel and server systemd lifecycles, and the owner's expectation that the workspace allows tools that are not read-only remain unverified external blockers.

@@ -1,6 +1,6 @@
 # Second Brain MCP
 
-A private, local-first MCP server that lets Codex and Claude Code consult a separate Ollama chatbot. It stores conversations by authenticated client in SQLite; the Ollama model receives no tools and cannot access files, shell commands, repositories, or the network through this application. Remote ChatGPT support is planned but not implemented.
+A private, local-first MCP server that lets Codex and Claude Code consult a separate Ollama chatbot. It stores conversations by authenticated client in SQLite; the Ollama model receives no tools and cannot access files, shell commands, repositories, or the network through this application. A ChatGPT connection through an OpenAI Secure MCP Tunnel is documented but has not been verified live.
 
 The implementation follows [`docs/SPEC.md`](docs/SPEC.md), with dependency-ordered work tracked in [`docs/TODO.md`](docs/TODO.md). It targets Python 3.12+, `uv`, and an existing Ollama installation. No container runtime is required.
 
@@ -32,7 +32,7 @@ A failed tool call returns `isError: true` with text that is exactly `<code>: <m
 
 ## Connect an MCP client
 
-Follow the [client setup guide](docs/integrations/local-clients.md) for user-scoped Codex and Claude Code setup. Both have been smoke-tested against the local server. Hosted ChatGPT cannot reach this loopback endpoint, and this repository does not yet implement the remote authentication and HTTPS ingress required for a ChatGPT connection. Do not expose the local server with a static bearer token; ChatGPT setup is currently a documented limitation, not a working integration.
+Follow the [client setup guide](docs/integrations/local-clients.md) for user-scoped Codex and Claude Code setup. Both have been smoke-tested against the local server. Hosted ChatGPT cannot reach this loopback endpoint directly. The guide documents a connection through an OpenAI Secure MCP Tunnel using a dedicated `chatgpt` principal, with no public port. That procedure has not been run against a real ChatGPT workspace, so ChatGPT is not yet a verified integration. Do not expose the local server publicly with a static bearer token.
 
 See [operations](docs/operations.md) for database administration, backup, restore, Ubuntu service setup, and troubleshooting.
 

@@ -81,4 +81,4 @@ Configuration lives in `[tool.coverage.*]` in `pyproject.toml`. The gate is `fai
 - Timeout or queue-full response: verify Ollama is responsive and lower inference concurrency; large context profiles can take longer and consume more memory.
 - MCP Inspector prompts for OAuth: Inspector defaults to OAuth; for this local bearer-token server, pass an Authorization header using a private local test setup.
 
-See [local client setup](integrations/local-clients.md) for Codex and Claude Code configuration. Remote ChatGPT setup remains blocked until a supported authenticated endpoint and workspace access are available.
+See [local client setup](integrations/local-clients.md) for Codex and Claude Code configuration. The ChatGPT section describes a connection through an OpenAI Secure MCP Tunnel (`deploy/second-brain-tunnel.service.example`, `deploy/tunnel.env.example`); it needs an OpenAI Platform tunnel, a runtime key, and a ChatGPT workspace with Developer mode, and has not been verified live.

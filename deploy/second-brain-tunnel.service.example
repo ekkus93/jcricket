@@ -1,0 +1,36 @@
+# Example only: the unit lifecycle (start, restart, stop) has not been
+# demonstrated because the development host does not run systemd.
+#
+# Before enabling, create the service user and, as that user, the profile:
+#   sudo -u second-brain-tunnel HOME=/var/lib/second-brain-tunnel \
+#     tunnel-client init --sample sample_mcp_remote_no_auth --profile second-brain \
+#       --tunnel-id tunnel_xxx --mcp-server-url http://127.0.0.1:8000/mcp \
+#       --health-listen-addr 127.0.0.1:18081
+# (with the variables from /etc/second-brain/tunnel.env exported), then add the
+# `mcp.extra_headers` block described in docs/integrations/local-clients.md with
+# `tunnel-client profiles edit second-brain`.
+[Unit]
+Description=Second Brain MCP OpenAI Secure MCP Tunnel
+After=network-online.target second-brain.service
+Wants=network-online.target
+Requires=second-brain.service
+
+[Service]
+Type=simple
+User=second-brain-tunnel
+Group=second-brain-tunnel
+Environment=HOME=/var/lib/second-brain-tunnel
+EnvironmentFile=/etc/second-brain/tunnel.env
+# Adapt this path to the installed tunnel-client binary.
+ExecStart=/usr/local/bin/tunnel-client run --profile second-brain
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/second-brain-tunnel
+
+[Install]
+WantedBy=multi-user.target

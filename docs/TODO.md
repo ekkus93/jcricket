@@ -1,6 +1,6 @@
 # Second Brain MCP — Implementation TODO
 
-**Status:** In progress — local v0.1 implemented. Open: SB-002 (spec files not at repository root), SB-040 (dropped by owner decision 2026-10-26), SB-041–SB-046 and SB-054 (blocked: no remote endpoint or ChatGPT workspace), SB-052 (needs a live Codex re-run on current code, including restart), SB-062 (no systemd host), SB-063 (ChatGPT guide blocked); SB-100–SB-107 deferred. Round-2 remediation is in progress in `docs/REMEDIATION_2_TODO.md`.
+**Status:** In progress — local v0.1 implemented. Open: SB-002 (spec files not at repository root), SB-040 (dropped by owner decision 2026-10-26), SB-041–SB-046 and SB-054 (ChatGPT: a tunnel-based procedure is documented in `docs/integrations/local-clients.md` but not run live; it needs an OpenAI Platform tunnel, a runtime key, and a ChatGPT workspace with Developer mode), SB-052 (needs a live Codex re-run on current code, including restart), SB-062 (no systemd host), SB-063 (ChatGPT guide blocked); SB-100–SB-107 deferred. Round-2 remediation is in progress in `docs/REMEDIATION_2_TODO.md`.
 **Date:** 2026-10-25  
 **Reference:** [SPEC.md](SPEC.md)  
 **Repository:** `ekkus93/jcricket` (working tree implementation in progress)
@@ -94,12 +94,20 @@
 
 - [ ] **SB-040** Inspect the owner's working Ralph Bridge connectivity/auth deployment **as a design reference** (without copying credentials); verify current ChatGPT workspace/account feature support.
   - Owner decision (2026-10-26): Drop the Ralph Bridge design-reference requirement; it is not a dependency of the Ollama MCP server. Removed the references from `docs/SPEC.md` §§2.1.10 and 7.2. This task remains unchecked as dropped scope; ChatGPT workspace access remains tracked in SB-054.
+  - Note (2026-10-26): at the owner's suggestion the Ralph Bridge `SETUP.md` was read as a design reference for the OpenAI side. It uses an OpenAI Secure MCP Tunnel (`tunnel-client`, a tunnel ID, a restricted runtime key, and a ChatGPT custom app of type Tunnel), which is the path now documented for this server. The item stays unchecked: the second clause (verify current ChatGPT workspace/account feature support) has not been verified, and the earlier owner decision above is unchanged unless the owner records a new one.
 - [ ] **SB-041** Choose secure remote ingress: TLS reverse proxy or supported private MCP tunnel. Keep MCP/Ollama/SQLite internal and enforce a strict trusted-host configuration.
+  - Note (2026-10-26): the documented route is an outbound OpenAI Secure MCP Tunnel instead of a reverse proxy; nothing is exposed inbound and no `trusted_hosts` entry is needed. Not verified live.
 - [ ] **SB-042** Determine actual ChatGPT authentication requirements. Where applicable use conformant OAuth 2.1, protected-resource metadata, PKCE, secure authorization-server integration, and issuer/audience/scope verification; avoid writing a custom provider when one already exists.
+  - Note (2026-10-26): for the tunnel route the ChatGPT-to-OpenAI authentication is workspace association of the tunnel and no OAuth provider is needed; the injected bearer token is sent only to loopback. This is from `tunnel-client` help and the Ralph Bridge docs, not a live test. OAuth remains required only if a public HTTPS endpoint is used.
 - [ ] **SB-043** Allocate a distinct authenticated `chatgpt` principal so its conversations are isolated from Codex and Claude Code.
+  - Note (2026-10-26): the capability exists and is tested (`tests/security/test_additional_principal.py`: a configured `chatgpt` token maps to its own principal, an unknown token gets 401, and its conversations are invisible to `codex` and `claude-code`). Left unchecked because the `chatgpt` principal has not been provisioned in the owner's installation or used from ChatGPT.
 - [ ] **SB-044** Provide deployable reverse-proxy or tunnel example with TLS, forwarded-header safety, request limits, access restrictions, and appropriate long-running inference timeouts.
+  - Note (2026-10-26): `deploy/second-brain-tunnel.service.example` and `deploy/tunnel.env.example` were added for the tunnel route; their lifecycle was not demonstrated (no systemd here). `deploy/reverse-proxy.example` remains a non-functional sketch.
+  - Note (2026-10-26): the owner confirmed persisting the upstream bearer header in the tunnel profile as `mcp.extra_headers` (a map, with `Authorization: "env:SECOND_BRAIN_UPSTREAM_AUTH"`), rather than relying on the `MCP_EXTRA_HEADERS` environment variable. The key was accepted by `tunnel-client` 0.0.16 profile validation offline; that the header reaches this server at runtime is still unverified (SB-046, SB-054).
 - [ ] **SB-045** Test unauthorized/expired/incorrect-audience tokens, Auth metadata if used, Host/Origin policy, replay/failure cases, and publicly exposed surface.
+  - Note (2026-10-26): the tunnel route has no public surface. Unauthenticated, wrong-token, and Host/Origin cases are covered by the existing local tests; OAuth, expiry, and audience cases do not apply to this route. Remote-path tests await a live tunnel.
 - [ ] **SB-046** Confirm remote `/mcp` discovery and a valid authorized tool invocation using an MCP test client before attempting ChatGPT setup.
+  - Note (2026-10-26): the procedure is `docs/integrations/local-clients.md` section 5, rows 1, 2, 3, and 6; it needs an OpenAI Platform tunnel and runtime key and was not run.
 
 **Gate P4:** A remote authenticated MCP test client works over the protected endpoint without exposing the Ollama API. This does **not** by itself prove ChatGPT integration.
 
@@ -119,6 +127,7 @@
   - Note: one post-restart question that mentioned "a server restart" got the model to claim it had no history, although the prompt included it (`prompt_tokens` rose from 181 to 226). That is model behavior, not a persistence failure; the neutral re-ask above recalled the code word. This session's displayed tool schema was cached at session start, so the `mode` enum was confirmed separately by the RM2-040 Inspector check.
 - [ ] **SB-054** Register/connect the authorized remote endpoint in the owner's actual ChatGPT environment and verify live `list_models` and `ask_second_brain` calls, then a conversation continuation. **[EXTERNAL ACCESS MAY BLOCK]**
   - Note: Blocked — no remote endpoint or ChatGPT workspace access.
+  - Note (2026-10-26): blocked on owner actions only: create or choose an OpenAI Platform tunnel and a restricted runtime key, enable Developer mode, create the Tunnel app, and run the test table in `docs/integrations/local-clients.md`. Record the outcome here. An earlier attempt to run `tunnel-client dev proxy` as a local stand-in was blocked by the auto-mode classifier and not retried.
 - [x] **SB-055** If ChatGPT cannot connect because of account/workspace permission, connector transport, or auth policy, document the exact issue and evidence; do not mark ChatGPT validated or invent a workaround.
   - Evidence: the exact blocker (no authenticated remote endpoint, no eligible ChatGPT workspace) is documented in `docs/integrations/local-clients.md`, `README.md`, and the verification record; ChatGPT is not marked validated and no workaround is offered.
 - [x] **SB-056** Run a cross-client isolation test with distinct principals and intentionally presented foreign conversation IDs.
@@ -139,7 +148,8 @@
 - [ ] **SB-062** Provide systemd unit and direct Ubuntu setup; demonstrate startup/restart/shutdown without Docker/Podman.
   - Note: example unit and setup instructions exist, but startup/restart/shutdown cannot be demonstrated because this environment is not booted with systemd.
 - [ ] **SB-063** Provide separate Codex, Claude Code, and ChatGPT connection guides, `list_models` examples, sample prompts, profile/direct-model selection, troubleshooting, and secure token instructions.
-  - Local client guidance exists. ChatGPT remote setup remains blocked by missing ingress and workspace access.
+  - Local client guidance exists. The ChatGPT setup is documented but unverified, and is blocked on owner actions in OpenAI Platform and ChatGPT plus a live run (see the 2026-10-26 note below).
+  - Note (2026-10-26): a ChatGPT section now exists (unverified) alongside the Codex and Claude Code sections, with sample prompts, troubleshooting, and token instructions. Left unchecked until it has been run live.
 - [x] **SB-064** Document runtime configuration, admin CLI, profile switching, usage reporting, backup, migration, and removal.
 - [x] **SB-065** Run `uv sync --locked`, `ruff check`, formatting checks, full mocked pytest suite, and explicit opt-in live integration tests; fix all actionable failures.
   - Final run on tested code commit `b1ffb35`: locked sync, Ruff lint/format, `uv run pytest -q` (137 passed, 1 live skipped), and `SECOND_BRAIN_LIVE=1 uv run pytest -m live -q` (1 passed). One Starlette/httpx deprecation warning.

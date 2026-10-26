@@ -28,6 +28,8 @@ limits:
 token_env:
   codex: CODEX_MCP_TOKEN
   claude-code: CLAUDE_CODE_MCP_TOKEN
+  # Optional dedicated ChatGPT principal (see docs/integrations/local-clients.md):
+  # chatgpt: CHATGPT_MCP_TOKEN
 retention_days: null
 trusted_hosts: []
 # Store secrets in the environment, never in this file.
