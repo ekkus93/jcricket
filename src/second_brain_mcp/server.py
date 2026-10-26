@@ -31,21 +31,49 @@ class SecondBrainMCP(FastMCP):
     """FastMCP server that returns tool errors as exactly ``<code>: <message>``."""
 
     async def call_tool(self, name, arguments):
+        started = monotonic()
+        if self._tool_manager.get_tool(name) is None:
+            return self._error_result(
+                name, "invalid_input", started, "invalid_input: unknown tool"
+            )
         try:
             return await super().call_tool(name, arguments)
         except ToolError as exc:
             code, text = _tool_error(exc)
             if not isinstance(exc.__cause__, SecondBrainError):
-                logger.log(
-                    ERROR_LOG_LEVELS[code],
-                    "request_id=%s tool=%s status=error category=%s",
-                    current_request_id(),
-                    name,
-                    code,
-                )
-            return CallToolResult(
-                content=[TextContent(type="text", text=text)], isError=True
-            )
+                return self._error_result(name, code, started, text)
+            return _error_content(text)
+
+    def _error_result(
+        self, name: str, code: str, started: float, text: str
+    ) -> CallToolResult:
+        """Log with the full tool-log field set, then build the error result."""
+        try:
+            rpc_id = str(self.get_context().request_id)
+        except ValueError:
+            rpc_id = "-"
+        try:
+            principal = current_principal()
+        except SecondBrainError:
+            principal = "-"
+        logger.log(
+            ERROR_LOG_LEVELS[code],
+            "request_id=%s rpc_id=%s tool=%s principal=%s status=error "
+            "category=%s mode=- profile=- model=- context_limit_tokens=- "
+            "history_trimmed=- elapsed_ms=%s prompt_tokens=- completion_tokens=- "
+            "conversation_id_hash=-",
+            current_request_id(),
+            rpc_id,
+            name,
+            principal,
+            code,
+            round((monotonic() - started) * 1000),
+        )
+        return _error_content(text)
+
+
+def _error_content(text: str) -> CallToolResult:
+    return CallToolResult(content=[TextContent(type="text", text=text)], isError=True)
 
 
 def _tool_error(exc: ToolError) -> tuple[str, str]:
@@ -62,8 +90,6 @@ def _tool_error(exc: ToolError) -> tuple[str, str]:
             else "the request is invalid"
         )
         return "invalid_input", f"invalid_input: {message}"
-    if cause is None and str(exc).startswith("Unknown tool"):
-        return "invalid_input", "invalid_input: unknown tool"
     logger.error(
         "request_id=%s unexpected_error_type=%s",
         current_request_id(),

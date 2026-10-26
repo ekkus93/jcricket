@@ -68,11 +68,15 @@
 
 ## Phase D — Server (P1)
 
-- [ ] **RM3-023** Give the `SecondBrainMCP.call_tool` fallback log line the full R-44 field set, with `rpc_id` from `self.get_context().request_id` (or `-`) and `principal` from the auth ContextVar (or `-`) (R3-23).
+- [x] **RM3-023** Give the `SecondBrainMCP.call_tool` fallback log line the full R-44 field set, with `rpc_id` from `self.get_context().request_id` (or `-`) and `principal` from the auth ContextVar (or `-`) (R3-23).
   - Test: a `caplog` test triggers `mode="nope"` and an unknown tool; each record contains every R-44 field name exactly once and `rpc_id` equals the JSON-RPC id sent.
-- [ ] **RM3-024** Detect unknown tools with `self._tool_manager.get_tool(name) is None` before calling `super().call_tool`, and remove the `"Unknown tool"` string match from `_tool_error` (R3-24).
+  - Evidence (fail first): on unfixed code `test_fallback_error_logs_carry_every_r44_field` failed with `StopIteration` (no fallback log record contained `rpc_id=`).
+  - Evidence (after fix): `SecondBrainMCP._error_result` logs the same 15 fields in the handlers' order (`rpc_id` from `get_context().request_id` or `-`, `principal` from the auth ContextVar or `-`, `elapsed_ms` measured). The test sends JSON-RPC ids 4242 (`mode="nope"`) and 4343 (unknown tool), finds each record by `rpc_id=<id>`, and asserts every field name occurs exactly once, `principal=codex`, and the right `tool=`. `test_call_tool_outside_a_request_logs_placeholder_ids` covers the `-` fallbacks (called directly with no request or principal). Full suite 286 passed, 1 skipped.
+- [x] **RM3-024** Detect unknown tools with `self._tool_manager.get_tool(name) is None` before calling `super().call_tool`, and remove the `"Unknown tool"` string match from `_tool_error` (R3-24).
   - Test: `test_unknown_tool_is_invalid_input` still passes.
   - Test: patching `FastMCP.call_tool` to raise `ToolError("Unknown tool: delete_everything")` with no cause for a known tool name yields exactly `internal_error: the server could not complete the request`.
+  - Evidence (fail first): on unfixed code `test_unknown_tool_is_not_detected_from_sdk_message_text` failed: the known tool `list_models` with SDK-style wording returned `invalid_input: unknown tool` instead of `internal_error`.
+  - Evidence (after fix): `call_tool` returns `invalid_input: unknown tool` when `self._tool_manager.get_tool(name) is None`, before calling the SDK; the `"Unknown tool"` string match is gone from `_tool_error`. `test_unknown_tool_is_invalid_input` still passes; the new test passes.
 
 ## Phase E — Documentation (P1)
 

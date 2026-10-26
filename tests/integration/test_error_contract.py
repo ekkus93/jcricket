@@ -167,3 +167,102 @@ def test_error_log_level_follows_category(tmp_path: Path, monkeypatch, caplog) -
     assert levels["invalid_input"] == logging.INFO
     assert levels["ollama_unavailable"] == logging.WARNING
     assert levels["internal_error"] == logging.ERROR
+
+
+# R3-23 / R3-24: fallback log fields and unknown-tool detection
+
+R44_FIELDS = (
+    "request_id",
+    "rpc_id",
+    "tool",
+    "principal",
+    "status",
+    "category",
+    "mode",
+    "profile",
+    "model",
+    "context_limit_tokens",
+    "history_trimmed",
+    "elapsed_ms",
+    "prompt_tokens",
+    "completion_tokens",
+    "conversation_id_hash",
+)
+
+
+def _rpc(client: TestClient, rpc_id: int, tool: str, arguments: dict) -> dict:
+    headers = {
+        "Authorization": "Bearer " + TOKEN,
+        "Host": "127.0.0.1",
+        "Accept": "application/json, text/event-stream",
+    }
+    request = {
+        "jsonrpc": "2.0",
+        "id": rpc_id,
+        "method": "tools/call",
+        "params": {"name": tool, "arguments": arguments},
+    }
+    response = client.post("/mcp", json=request, headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()["result"]
+
+
+def test_fallback_error_logs_carry_every_r44_field(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="second_brain_mcp")
+    with TestClient(_app(tmp_path, monkeypatch)) as client:
+        _rpc(client, 4242, "ask_second_brain", {"question": "hi", "mode": "nope"})
+        _rpc(client, 4343, "delete_everything", {})
+    records = {
+        rpc_id: next(
+            record.getMessage()
+            for record in caplog.records
+            if f"rpc_id={rpc_id} " in record.getMessage()
+            and "status=error" in record.getMessage()
+        )
+        for rpc_id in (4242, 4343)
+    }
+    for rpc_id, line in records.items():
+        for field in R44_FIELDS:
+            assert line.count(f"{field}=") == 1, (rpc_id, field, line)
+        assert "principal=codex " in line
+        assert "category=invalid_input" in line
+    assert "tool=ask_second_brain" in records[4242]
+    assert "tool=delete_everything" in records[4343]
+
+
+def test_unknown_tool_is_not_detected_from_sdk_message_text(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    async def sdk_wording(self, name, arguments):
+        raise ToolError("Unknown tool: delete_everything")
+
+    monkeypatch.setattr(FastMCP, "call_tool", sdk_wording)
+    with TestClient(_app(tmp_path, monkeypatch)) as client:
+        result = _rpc(client, 7, "list_models", {})
+    _assert_error(result, INTERNAL)
+
+
+@pytest.mark.asyncio
+async def test_call_tool_outside_a_request_logs_placeholder_ids(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="second_brain_mcp")
+    mcp = _app(tmp_path, monkeypatch).state.mcp_server
+
+    result = await mcp.call_tool("delete_everything", {})
+
+    assert result.isError is True
+    assert result.content[0].text == "invalid_input: unknown tool"
+    [line] = [
+        record.getMessage()
+        for record in caplog.records
+        if "status=error" in record.getMessage()
+    ]
+    assert "rpc_id=- " in line
+    assert "principal=- " in line
+    assert "tool=delete_everything " in line
