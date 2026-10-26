@@ -276,3 +276,39 @@ async def test_context_window_warning_is_reported_once_per_tag(
         "its window is Ollama's default context length, which may be smaller "
         "than 4096"
     ]
+
+
+# R3-12: the startup check uses its own short metadata timeout
+
+
+@pytest.mark.asyncio
+async def test_context_window_check_builds_client_with_metadata_timeout(
+    app_config: Any, monkeypatch
+) -> None:
+    app_config.limits.metadata_timeout_seconds = 7
+    app_config.limits.request_timeout_seconds = 300
+    created: list[httpx.AsyncClient] = []
+    real_client = httpx.AsyncClient
+
+    def recording_client(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404, json={"error": "not found"})
+
+        client = real_client(*args, transport=httpx.MockTransport(handler), **kwargs)
+        created.append(client)
+        return client
+
+    monkeypatch.setattr("second_brain_mcp.ollama.httpx.AsyncClient", recording_client)
+    report = await verify_context_windows(app_config)
+
+    assert len(report.errors) == len(app_config.profiles) + len(
+        app_config.allowed_models
+    )
+    [client] = created
+    # httpx.MockTransport does not enforce httpx.Timeout (verified separately), so
+    # the wiring is asserted on the client's timeout object instead.
+    assert client.timeout == httpx.Timeout(
+        7, connect=app_config.limits.connect_timeout_seconds
+    )
+    assert client.timeout.read == 7 and client.timeout.read != 300
+    assert str(client.base_url).rstrip("/") == app_config.ollama_base_url

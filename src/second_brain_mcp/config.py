@@ -48,6 +48,7 @@ class Limits(StrictModel):
     queue_depth: int = Field(default=4, ge=0, le=128)
     request_timeout_seconds: float = Field(default=300, gt=0, le=3600)
     connect_timeout_seconds: float = Field(default=5, gt=0, le=120)
+    metadata_timeout_seconds: float = Field(default=10, gt=0, le=120)
     requests_per_minute: int = Field(default=60, gt=0, le=10_000)
     inventory_cache_seconds: int = Field(default=10, ge=0, le=300)
 

@@ -23,6 +23,7 @@ limits:
   queue_depth: 4
   request_timeout_seconds: 300
   connect_timeout_seconds: 5
+  metadata_timeout_seconds: 10
   requests_per_minute: 60
 token_env:
   codex: CODEX_MCP_TOKEN

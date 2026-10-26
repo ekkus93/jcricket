@@ -308,6 +308,18 @@ async def verify_context_windows(
     window pinned by the model variant would be silently truncated by Ollama.
     Raises ``OllamaError`` when Ollama cannot be queried.
     """
+    if client is None:
+        # Metadata lookups must not inherit the long inference timeout.
+        client = httpx.AsyncClient(
+            base_url=config.ollama_base_url,
+            timeout=httpx.Timeout(
+                config.limits.metadata_timeout_seconds,
+                connect=config.limits.connect_timeout_seconds,
+            ),
+        )
+        owns_client = True
+    else:
+        owns_client = False
     ollama = OllamaClient(config, client)
     selections = [
         (f"profile {name}", profile.model, profile.context_tokens)
@@ -350,7 +362,8 @@ async def verify_context_windows(
                 if warning not in warnings:
                     warnings.append(warning)
     finally:
-        await ollama.close()
+        if owns_client:
+            await client.aclose()
     return ContextWindowReport(errors, warnings)
 
 
