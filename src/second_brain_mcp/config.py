@@ -19,6 +19,7 @@ from pydantic import (
     model_validator,
 )
 
+from .budget import MIN_INPUT_TOKENS, available_input
 from .prompts import MODE_PROMPTS, system_prompt
 
 
@@ -258,12 +259,16 @@ def _validate_budget(context_tokens: int, completion_tokens: int, name: str) -> 
     if completion_tokens >= context_tokens:
         raise ValueError(f"{name} completion_tokens must be less than context_tokens")
     longest_prompt = max(
-        len(system_prompt(mode).encode("utf-8")) for mode in MODE_PROMPTS
+        (system_prompt(mode) for mode in MODE_PROMPTS),
+        key=lambda prompt: len(prompt.encode("utf-8")),
     )
-    if context_tokens - completion_tokens < longest_prompt + 256:
+    if available_input(context_tokens, completion_tokens, longest_prompt) < (
+        MIN_INPUT_TOKENS
+    ):
         raise ValueError(
             f"{name} leaves too little prompt budget after completion reserve; "
-            "leave room for the system prompt and at least 256 input tokens"
+            "leave room for the system prompt and at least "
+            f"{MIN_INPUT_TOKENS} input tokens"
         )
 
 

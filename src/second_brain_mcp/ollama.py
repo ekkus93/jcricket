@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from .budget import estimate_messages
 from .config import AppConfig
 from .errors import OllamaError
 
@@ -78,9 +79,7 @@ class OllamaClient:
                 raise OllamaError("ollama_bad_response")
             prompt_tokens = _optional_int(payload.get("prompt_eval_count"))
             completion_count = _optional_int(payload.get("eval_count"))
-            estimate = (
-                sum(len(item["content"].encode("utf-8")) + 8 for item in messages) + 16
-            )
+            estimate = estimate_messages(item["content"] for item in messages)
             if prompt_tokens is not None and prompt_tokens > estimate:
                 logger.warning(
                     "category=estimate_exceeded estimate=%d prompt_tokens=%d",

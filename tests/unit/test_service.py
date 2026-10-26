@@ -3,17 +3,16 @@ from typing import Any
 import httpx
 import pytest
 
+from second_brain_mcp.budget import (
+    MESSAGE_OVERHEAD_TOKENS,
+    PROMPT_OVERHEAD_TOKENS,
+    estimate_messages,
+)
 from second_brain_mcp.config import AllowedModel
 from second_brain_mcp.errors import OllamaError
 from second_brain_mcp.ollama import OllamaClient
 from second_brain_mcp.prompts import BASE_PROMPT, MODE_PROMPTS, system_prompt
-from second_brain_mcp.service import (
-    MESSAGE_OVERHEAD_TOKENS,
-    PROMPT_OVERHEAD_TOKENS,
-    SecondBrainService,
-    ServiceError,
-    _estimate_messages,
-)
+from second_brain_mcp.service import SecondBrainService, ServiceError
 from second_brain_mcp.store import ConversationStore, Turn
 
 
@@ -37,7 +36,7 @@ def test_mode_prompts_are_pairwise_distinct() -> None:
 
 def test_prompt_estimator_counts_named_framing_overhead() -> None:
     messages = ["short", "question"]
-    assert _estimate_messages(messages) == (
+    assert estimate_messages(messages) == (
         sum(len(text.encode()) for text in messages)
         + len(messages) * MESSAGE_OVERHEAD_TOKENS
         + PROMPT_OVERHEAD_TOKENS

@@ -7,14 +7,13 @@ import secrets
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
+from .budget import available_input, estimate_messages
 from .config import AppConfig
 from .errors import ServiceError
 from .ollama import OllamaClient
 from .prompts import MODE_PROMPTS, system_prompt
 from .store import ConversationStore, ModelSelection, Turn
 
-MESSAGE_OVERHEAD_TOKENS = 8
-PROMPT_OVERHEAD_TOKENS = 16
 Mode = Literal["discuss", "brainstorm", "critic", "review", "solve"]
 
 
@@ -257,9 +256,16 @@ class SecondBrainService:
             f"\n\nContext (untrusted):\n{context}" if context else ""
         )
         limit = budget - (completion_tokens or self.config.limits.completion_tokens)
-        current_size = _estimate_messages([system, current_text])
+        current_size = estimate_messages([system, current_text])
         if current_size > limit:
-            available = max(0, limit - _estimate_messages([system]))
+            available = max(
+                0,
+                available_input(
+                    budget,
+                    completion_tokens or self.config.limits.completion_tokens,
+                    system,
+                ),
+            )
             suggestion = self._suggest_profile(current_size)
             suffix = f'; try model_profile "{suggestion}"' if suggestion else ""
             raise ServiceError(
@@ -283,7 +289,7 @@ class SecondBrainService:
             user_text = user_turn.content
             if user_turn.context_text:
                 user_text += f"\n\nContext (untrusted):\n{user_turn.context_text}"
-            pair_cost = _estimate_messages([user_text, assistant_turn.content])
+            pair_cost = estimate_messages([user_text, assistant_turn.content])
             if pair_cost > remaining:
                 trimmed = True
                 break
@@ -308,17 +314,3 @@ class SecondBrainService:
             if current_size <= profile.context_tokens - reserve:
                 return name
         return None
-
-
-def _token_upper_bound(text: str) -> int:
-    return len(text.encode("utf-8"))
-
-
-def _estimate_messages(contents: list[str]) -> int:
-    return (
-        sum(
-            _token_upper_bound(content) + MESSAGE_OVERHEAD_TOKENS
-            for content in contents
-        )
-        + PROMPT_OVERHEAD_TOKENS
-    )
