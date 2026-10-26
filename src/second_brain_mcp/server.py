@@ -18,7 +18,7 @@ from starlette.applications import Starlette
 
 from .auth import LocalAuthMiddleware, current_principal, current_request_id
 from .config import AppConfig
-from .errors import SecondBrainError
+from .errors import ERROR_LOG_LEVELS, SecondBrainError
 from .ollama import OllamaClient
 from .schemas import AskResponse, ModelInventory
 from .service import SecondBrainService
@@ -37,7 +37,7 @@ class SecondBrainMCP(FastMCP):
             code, text = _tool_error(exc)
             if not isinstance(exc.__cause__, SecondBrainError):
                 logger.log(
-                    logging.ERROR if code == "internal_error" else logging.INFO,
+                    ERROR_LOG_LEVELS[code],
                     "request_id=%s tool=%s status=error category=%s",
                     current_request_id(),
                     name,
@@ -161,7 +161,8 @@ def create_app(config: AppConfig) -> Starlette:
             )
             response = AskResponse.model_validate(result)
         except SecondBrainError as exc:
-            logger.error(
+            logger.log(
+                ERROR_LOG_LEVELS[exc.code],
                 "request_id=%s rpc_id=%s tool=ask_second_brain principal=%s "
                 "status=error category=%s mode=%s profile=%s model=%s "
                 "context_limit_tokens=%s history_trimmed=%s elapsed_ms=%s "
@@ -252,7 +253,8 @@ def create_app(config: AppConfig) -> Starlette:
             principal = current_principal()
             inventory = ModelInventory.model_validate(await ollama.models())
         except SecondBrainError as exc:
-            logger.error(
+            logger.log(
+                ERROR_LOG_LEVELS[exc.code],
                 "request_id=%s rpc_id=%s tool=list_models principal=%s status=error "
                 "category=%s mode=- profile=- model=- context_limit_tokens=- "
                 "history_trimmed=- elapsed_ms=%s prompt_tokens=- completion_tokens=- "

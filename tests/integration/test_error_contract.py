@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 from pathlib import Path
 
@@ -125,3 +126,44 @@ def test_list_models_outage_returns_exact_error(tmp_path: Path, monkeypatch) -> 
     _assert_error(
         result, "ollama_unavailable: Ollama is unavailable or rejected the request"
     )
+
+
+def _category_levels(caplog) -> dict[str, int]:
+    return {
+        record.getMessage().split("category=")[1].split()[0]: record.levelno
+        for record in caplog.records
+        if record.name == "second_brain_mcp.server"
+        and "status=error category=" in record.getMessage()
+    }
+
+
+def test_error_log_level_follows_category(tmp_path: Path, monkeypatch, caplog) -> None:
+    caplog.set_level(logging.DEBUG, logger="second_brain_mcp")
+    app = _app(tmp_path, monkeypatch)
+    headers = {
+        "Authorization": "Bearer " + TOKEN,
+        "Host": "127.0.0.1",
+        "Accept": "application/json, text/event-stream",
+    }
+
+    def call(client: TestClient, tool: str, arguments: dict) -> None:
+        request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": tool, "arguments": arguments},
+        }
+        assert client.post("/mcp", json=request, headers=headers).status_code == 200
+
+    async def fail(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    with TestClient(app) as client:
+        call(client, "ask_second_brain", {"question": "   "})
+        call(client, "list_models", {})
+        app.state.service.ask = fail
+        call(client, "ask_second_brain", {"question": "hello"})
+    levels = _category_levels(caplog)
+    assert levels["invalid_input"] == logging.INFO
+    assert levels["ollama_unavailable"] == logging.WARNING
+    assert levels["internal_error"] == logging.ERROR

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 ERROR_MESSAGES = {
     "invalid_input": "the request is invalid",
     "conversation_unavailable": "conversation is unavailable",
@@ -16,6 +18,21 @@ ERROR_MESSAGES = {
     "ollama_bad_response": "Ollama returned malformed data",
     "unauthorized": "authenticated principal required",
     "internal_error": "the server could not complete the request",
+}
+
+# Caller mistakes are routine; backend trouble needs attention; the rest is a fault.
+ERROR_LOG_LEVELS = {
+    "invalid_input": logging.INFO,
+    "conversation_unavailable": logging.INFO,
+    "model_not_approved": logging.INFO,
+    "context_too_large": logging.INFO,
+    "busy": logging.WARNING,
+    "model_not_installed": logging.WARNING,
+    "ollama_unavailable": logging.WARNING,
+    "ollama_timeout": logging.WARNING,
+    "ollama_bad_response": logging.WARNING,
+    "unauthorized": logging.ERROR,
+    "internal_error": logging.ERROR,
 }
 
 

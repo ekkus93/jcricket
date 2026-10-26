@@ -119,8 +119,9 @@
   - Evidence: new `src/second_brain_mcp/budget.py` holds `MESSAGE_OVERHEAD_TOKENS`, `PROMPT_OVERHEAD_TOKENS`, `MIN_INPUT_TOKENS`, `estimate_messages`, and `available_input`; `service.py`, `ollama.py`, and `config.py` import them. Config validation now requires `available_input(...) >= MIN_INPUT_TOKENS` (system prompt with framing, plus the input message's framing, plus 256).
   - Evidence: `tests/unit/test_budget.py` — `test_estimator_constants_and_formula_live_only_in_budget_module` (fails against the previous `service.py`/`ollama.py`/`config.py`, passes now) and `test_operations_input_table_matches_estimator` (documented 2,516 / 30,164 / 128,468 / 259,540 bytes match). Full suite 188 passed, 1 skipped.
   - Note: `context_too_large` now reports the same `available_input` value; it was previously 8 bytes higher than the documented table because it ignored the input message's own framing.
-- [ ] **RM2-021** Add the error-code-to-log-level map to `errors.py` and use it in both handlers and the `call_tool` override (R2-21).
+- [x] **RM2-021** Add the error-code-to-log-level map to `errors.py` and use it in both handlers and the `call_tool` override (R2-21).
   - Test: one code from each level row is logged at the mapped level.
+  - Evidence: `ERROR_LOG_LEVELS` in `src/second_brain_mcp/errors.py` covers all eleven codes (`test_every_error_code_has_a_log_level`); both handlers and `SecondBrainMCP.call_tool` log through it. `test_error_log_level_follows_category` checks `invalid_input` at INFO, `ollama_unavailable` at WARNING, `internal_error` at ERROR through real MCP calls; it failed before the change (`assert 40 == 20`). Full suite 190 passed, 1 skipped.
 - [ ] **RM2-022** Delete `ConversationStore.create`, `add_turn`, and `update_selection`; migrate tests to `record_turn` or a `conftest.py` helper (R2-22).
   - Acceptance: `grep -rnE "\.create\(|add_turn|update_selection" src tests` finds no `ConversationStore` uses; the full suite passes.
 - [ ] **RM2-023** Add the subprocess uvicorn access-log leakage test (R2-23).
