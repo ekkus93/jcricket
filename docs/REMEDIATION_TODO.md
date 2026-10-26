@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation TODO
 
-**Status:** In progress — RM-010, RM-019, and RM-060 are reopened until REMEDIATION_2 task RM2-010 delivers the exact `<code>: <message>` error text. Gate R1's "failed before the fix" clause is met for 3 of 12 bugs only (see the note under Gate R1). RM-052 and RM-053 rely on live runs recorded on 2026-10-26 that have not been repeated on later code.
+**Status:** In progress — Gate R1's "failed before the fix" clause is met for 3 of 12 bugs only (see the note under Gate R1). RM-052 and RM-053 rely on live runs recorded on 2026-10-26 that have not been repeated on later code.
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_SPEC.md](REMEDIATION_SPEC.md) (requirements `R-xx`), [SPEC.md](SPEC.md)  
 **Related:** [TODO.md](TODO.md) (original v0.1 items `SB-xxx`)
@@ -42,8 +42,9 @@
 
 ### Model selection
 
-- [ ] **RM-010** Introduce the error hierarchy: `SecondBrainError` with a `code` attribute and fixed messages for every code in R-20; make `ServiceError` and `OllamaError` subclasses or replace them; all raised errors render as `<code>: <message>` (R-20).
+- [x] **RM-010** Introduce the error hierarchy: `SecondBrainError` with a `code` attribute and fixed messages for every code in R-20; make `ServiceError` and `OllamaError` subclasses or replace them; all raised errors render as `<code>: <message>` (R-20).
   - Note: unchecked by RM2-004 until RM2-010 delivers exactly `<code>: <message>` to MCP clients; today the SDK prefixes `Error executing tool <name>:`.
+  - Evidence (RM2-011, commit `0b5f9e1`): MCP clients now receive exactly `<code>: <message>` with `isError: true`. `tests/integration/test_error_contract.py` checks exact text for service errors, argument validation, unknown tools, Ollama outage, response-validation failure, and injected `sqlite3.OperationalError` / `AttributeError` (original message absent).
   - Test: every code has a fixed message string, and each existing failure path raises the expected code.
 - [x] **RM-011** Re-validate the stored selection on continuation per the R-10 table: profile conversations follow the current profile mapping; direct-model conversations require the tag to still be in `allowed_models` with its current budget; anything else gives `model_not_approved` (R-10, R-11). Depends on RM-010.
   - Test: revoked direct model blocks continuation; remapped profile tag is used and persisted after success; budget change takes effect; explicit profile or model on continuation validated like a new conversation.
@@ -68,9 +69,10 @@
 
 ### Error sanitization and auth
 
-- [ ] **RM-019** In both tool handlers, re-raise `SecondBrainError`, convert every other `Exception` to `internal_error`, log the type and request ID at `ERROR` and details only at `DEBUG`, and never catch `CancelledError` (R-21). Depends on RM-010.
+- [x] **RM-019** In both tool handlers, re-raise `SecondBrainError`, convert every other `Exception` to `internal_error`, log the type and request ID at `ERROR` and details only at `DEBUG`, and never catch `CancelledError` (R-21). Depends on RM-010.
   - Test: injected `sqlite3.OperationalError` and `AttributeError` produce exactly the `internal_error` text in the MCP response; the original message is absent from the response.
   - Note: unchecked by RM2-004 until RM2-010 delivers exactly `<code>: <message>` to MCP clients; today the SDK prefixes `Error executing tool <name>:`.
+  - Evidence (RM2-011, commit `0b5f9e1`): MCP clients now receive exactly `<code>: <message>` with `isError: true`. `tests/integration/test_error_contract.py` checks exact text for service errors, argument validation, unknown tools, Ollama outage, response-validation failure, and injected `sqlite3.OperationalError` / `AttributeError` (original message absent).
   - Evidence: MCP returns the fixed `internal_error` text without the original exception. The installed FastMCP SDK adds its standard `Error executing tool <name>:` prefix around raised tool errors; the regression test checks the canonical error suffix and no raw detail.
 - [x] **RM-020** Compare credentials as bytes; non-printable-ASCII or malformed tokens get 401; `credentials()` rejects non-ASCII configured tokens (R-22).
   - Test: R-22's cases, including raw byte `0xE9` (the reproduced 500), never return 500.
@@ -168,8 +170,9 @@
 
 ## Phase R5 — Reconcile and release (P1)
 
-- [ ] **RM-060** Apply the `SPEC.md` changes from REMEDIATION_SPEC §12 (the Ralph Bridge row only if RM-006 chose option (b)).
+- [x] **RM-060** Apply the `SPEC.md` changes from REMEDIATION_SPEC §12 (the Ralph Bridge row only if RM-006 chose option (b)).
   - Note: unchecked by RM2-004 until RM2-010 delivers exactly `<code>: <message>` to MCP clients; today the SDK prefixes `Error executing tool <name>:`.
+  - Evidence (RM2-011, commit `0b5f9e1`): MCP clients now receive exactly `<code>: <message>` with `isError: true`. `tests/integration/test_error_contract.py` checks exact text for service errors, argument validation, unknown tools, Ollama outage, response-validation failure, and injected `sqlite3.OperationalError` / `AttributeError` (original message absent).
   - Applied error-code, inventory truncation, continuation selection, transactional persistence, admin export/retention, trusted-host, single-process, and request-ID guidance. The owner-approved Ralph Bridge removal was already recorded under RM-006.
 - [x] **RM-061** Re-evaluate SB-018, SB-019, SB-022, SB-024–SB-026, SB-028, SB-032–SB-035, SB-060, and SB-065 in `docs/TODO.md` against their original wording and the new evidence; check only items that fully pass; add evidence rows to the verification record. Do not change requirement text.
   - Re-evaluated requirements without changing their wording. SB-018/019, 022, 024–026, 028, 032–035, 060, and 065 now pass after the RM-064 final rerun. Evidence rows were added to `docs/TODO.md`.

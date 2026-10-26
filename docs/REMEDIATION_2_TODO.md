@@ -55,7 +55,8 @@
   - Evidence required: the empty-question and `mode="nope"` tests fail on `ad85cdb` (SDK prefix and raw pydantic text).
   - Evidence (fail first): `uv run pytest -q tests/integration/test_error_contract.py` on unfixed code (`66802de`, same source as `ad85cdb`): 7 failed. Texts were `Error executing tool ask_second_brain: invalid_input: question must not be empty`, a raw pydantic `1 validation error for ask_second_brainArguments…` for `mode="nope"`, `Error executing tool …: internal_error: …`, and `Unknown tool: delete_everything`.
   - Evidence (after fix): `SecondBrainMCP.call_tool` in `src/second_brain_mcp/server.py` maps `ToolError` causes to exact `CallToolResult(isError=True)` text; `model_validate` now runs inside each handler's `try`. All 7 tests in `tests/integration/test_error_contract.py` pass with exact equality, `isError: true`, no `structuredContent`, and no `nope` or `secret-marker` in responses. Full suite: 159 passed, 1 skipped.
-- [ ] **RM2-011** After RM2-010, re-check RM-010, RM-019, and RM-060 in `docs/REMEDIATION_TODO.md` with `Evidence:` sub-bullets naming the RM2-010 tests (R2-04). Depends on RM2-010.
+- [x] **RM2-011** After RM2-010, re-check RM-010, RM-019, and RM-060 in `docs/REMEDIATION_TODO.md` with `Evidence:` sub-bullets naming the RM2-010 tests (R2-04). Depends on RM2-010.
+  - Evidence: RM-010, RM-019, RM-060 re-checked with an `Evidence:` sub-bullet citing `tests/integration/test_error_contract.py` and commit `0b5f9e1`; RM-019's restored `Test:` line is met by `test_unexpected_exceptions_return_exact_internal_error`. The `REMEDIATION_TODO.md` Status line no longer lists them as reopened.
 
 ### Conversation behavior
 
