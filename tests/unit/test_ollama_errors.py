@@ -312,3 +312,17 @@ async def test_context_window_check_builds_client_with_metadata_timeout(
     )
     assert client.timeout.read == 7 and client.timeout.read != 300
     assert str(client.base_url).rstrip("/") == app_config.ollama_base_url
+
+
+@pytest.mark.asyncio
+async def test_close_only_closes_a_client_the_adapter_created(app_config: Any) -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})
+
+    async with _client(handler) as injected:
+        await OllamaClient(app_config, injected).close()
+        assert injected.is_closed is False
+
+    owner = OllamaClient(app_config)
+    await owner.close()
+    assert owner._client.is_closed is True
