@@ -1,8 +1,5 @@
 import json
-import os
 import stat
-import subprocess
-import sys
 from pathlib import Path
 
 from starlette.testclient import TestClient
@@ -11,29 +8,25 @@ from second_brain_mcp.config import AppConfig, ModelProfile
 from second_brain_mcp.server import create_app
 
 
-def test_auth_headers_supports_custom_environment_variable(tmp_path: Path) -> None:
+def test_auth_headers_supports_custom_environment_variable(
+    tmp_path: Path, load_script, run_main
+) -> None:
     credentials = tmp_path / "credentials.env"
     credentials.write_text("CUSTOM_TOKEN=" + "z" * 40 + "\n", encoding="utf-8")
     credentials.chmod(0o600)
-    environment = os.environ | {"SECOND_BRAIN_CREDENTIALS_FILE": str(credentials)}
-    result = subprocess.run(
-        [
-            sys.executable,
-            "deploy/auth_headers.py",
-            "codex",
-            "--env-var",
-            "CUSTOM_TOKEN",
-        ],
-        capture_output=True,
-        text=True,
-        env=environment,
-        check=True,
+    result = run_main(
+        load_script("deploy/auth_headers.py"),
+        "codex",
+        "--env-var",
+        "CUSTOM_TOKEN",
+        env={"SECOND_BRAIN_CREDENTIALS_FILE": str(credentials)},
     )
+    assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {"Authorization": "Bearer " + "z" * 40}
 
 
 def test_rotation_atomically_replaces_tokens_and_preserves_private_backup(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, load_script, run_main
 ) -> None:
     home = tmp_path / "home"
     credential_dir = home / ".config/second-brain"
@@ -51,20 +44,14 @@ def test_rotation_atomically_replaces_tokens_and_preserves_private_backup(
         credentials.read_text(encoding="utf-8"), encoding="utf-8"
     )
     service_credentials.chmod(0o640)
-    environment = os.environ | {"HOME": str(home)}
-    subprocess.run(
-        [
-            sys.executable,
-            "scripts/init_credentials.py",
-            "--rotate",
-            "--service-file",
-            str(service_credentials),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        env=environment,
+    result = run_main(
+        load_script("scripts/init_credentials.py"),
+        "--rotate",
+        "--service-file",
+        str(service_credentials),
+        env={"HOME": str(home)},
     )
+    assert result.returncode == 0, result.stderr
     backup = credentials.with_name("credentials.env.bak")
     assert backup.read_text(encoding="utf-8").find(old_codex) >= 0
     assert stat.S_IMODE(backup.stat().st_mode) == 0o600

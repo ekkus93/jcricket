@@ -43,19 +43,24 @@ def _setup(tmp_path: Path, extra: str = "") -> tuple[Path, Path, Path]:
     return home, user_file, service_file
 
 
-def _rotate(home: Path, service_file: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--rotate",
-            "--service-file",
-            str(service_file),
-        ],
-        capture_output=True,
-        text=True,
-        env=os.environ | {"HOME": str(home)},
-    )
+@pytest.fixture
+def init(load_script, run_main, monkeypatch):
+    """Run ``init_credentials.main()`` in-process with HOME pointing at ``home``."""
+    module = load_script("scripts/init_credentials.py")
+
+    def run(home: Path, *args: str):
+        monkeypatch.setenv("HOME", str(home))
+        return run_main(module, *args)
+
+    return run
+
+
+@pytest.fixture
+def rotate(init):
+    def run(home: Path, service_file: Path):
+        return init(home, "--rotate", "--service-file", str(service_file))
+
+    return run
 
 
 def _mode(path: Path) -> int:
@@ -63,13 +68,13 @@ def _mode(path: Path) -> int:
 
 
 def test_three_consecutive_rotations_keep_previous_tokens_in_backup(
-    tmp_path: Path,
+    rotate, tmp_path: Path
 ) -> None:
     home, user_file, service_file = _setup(tmp_path)
     for _ in range(3):
         previous_user = _values(user_file)
         previous_service = _values(service_file)
-        result = _rotate(home, service_file)
+        result = rotate(home, service_file)
         assert result.returncode == 0, result.stderr
         user_backup = user_file.with_name("credentials.env.bak")
         service_backup = service_file.with_name("credentials.env.bak")
@@ -83,10 +88,10 @@ def test_three_consecutive_rotations_keep_previous_tokens_in_backup(
         assert _mode(service_backup) == 0o600
 
 
-def test_rotation_preserves_other_lines_and_comments(tmp_path: Path) -> None:
+def test_rotation_preserves_other_lines_and_comments(rotate, tmp_path: Path) -> None:
     extra = "# keep this comment\nCHATGPT_MCP_TOKEN=" + "c" * 64 + "\n"
     home, user_file, service_file = _setup(tmp_path, extra)
-    result = _rotate(home, service_file)
+    result = rotate(home, service_file)
     assert result.returncode == 0, result.stderr
     for path in (user_file, service_file):
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -97,17 +102,16 @@ def test_rotation_preserves_other_lines_and_comments(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
 def test_unwritable_service_directory_leaves_user_file_unchanged(
-    tmp_path: Path,
+    rotate, tmp_path: Path
 ) -> None:
     home, user_file, service_file = _setup(tmp_path)
     original = user_file.read_text(encoding="utf-8")
     service_file.parent.chmod(0o500)
     try:
-        result = _rotate(home, service_file)
+        result = rotate(home, service_file)
     finally:
         service_file.parent.chmod(0o700)
     assert result.returncode == 1
-    assert "Traceback" not in result.stderr
     assert str(service_file.parent) in result.stderr
     assert user_file.read_text(encoding="utf-8") == original
 
@@ -138,7 +142,7 @@ def test_failed_replacement_restores_already_rotated_files(
     ]
 
 
-def _init(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def _init_process(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         capture_output=True,
@@ -147,22 +151,23 @@ def _init(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_rotate_without_existing_file_fails_cleanly(tmp_path: Path) -> None:
+def test_rotate_without_existing_file_fails_cleanly(init, tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()
-    result = _init(home, "--rotate")
+    result = init(home, "--rotate")
     path = home / ".config/second-brain/credentials.env"
+    # In-process: main() returned 1 and raised nothing, so there was no traceback.
     assert result.returncode == 1
-    assert "Traceback" not in result.stderr
     assert result.stderr.strip() == (
         f"cannot rotate credentials: credentials file does not exist: {path}"
     )
 
 
 def test_create_refuses_existing_file_without_traceback(tmp_path: Path) -> None:
+    """The one subprocess test: the script really runs as a program."""
     home, user_file, _service_file = _setup(tmp_path)
     original = user_file.read_text(encoding="utf-8")
-    result = _init(home)
+    result = _init_process(home)
     assert result.returncode == 1
     assert "Traceback" not in result.stderr
     assert result.stderr.strip() == (
@@ -172,10 +177,10 @@ def test_create_refuses_existing_file_without_traceback(tmp_path: Path) -> None:
     assert user_file.read_text(encoding="utf-8") == original
 
 
-def test_create_writes_private_file_with_distinct_tokens(tmp_path: Path) -> None:
+def test_create_writes_private_file_with_distinct_tokens(init, tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()
-    result = _init(home)
+    result = init(home)
     path = home / ".config/second-brain/credentials.env"
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
@@ -190,10 +195,10 @@ def test_create_writes_private_file_with_distinct_tokens(tmp_path: Path) -> None
     assert _mode(path.parent) == 0o700
 
 
-def test_rotate_user_file_only(tmp_path: Path) -> None:
+def test_rotate_user_file_only(init, tmp_path: Path) -> None:
     home, user_file, service_file = _setup(tmp_path)
     service_before = service_file.read_text(encoding="utf-8")
-    result = _init(home, "--rotate")
+    result = init(home, "--rotate")
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
         f"Rotated private credentials file: {user_file}",

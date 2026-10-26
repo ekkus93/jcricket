@@ -10,6 +10,7 @@ import pytest
 def test_auth_header_helper_reads_private_file_without_logging_token(
     tmp_path: Path,
 ) -> None:
+    """The one subprocess test: the helper really runs as a program."""
     credentials = tmp_path / "credentials.env"
     token = "c" * 64
     credentials.write_text(f"CODEX_MCP_TOKEN={token}\n", encoding="utf-8")
@@ -17,81 +18,86 @@ def test_auth_header_helper_reads_private_file_without_logging_token(
     env = os.environ | {"SECOND_BRAIN_CREDENTIALS_FILE": str(credentials)}
     result = subprocess.run(
         [sys.executable, "deploy/auth_headers.py", "codex"],
-        check=True,
         capture_output=True,
         text=True,
         env=env,
     )
+    assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {"Authorization": f"Bearer {token}"}
     assert token not in result.stderr
+    assert "Traceback" not in result.stderr
 
 
-def test_auth_header_helper_rejects_loose_file_permissions(tmp_path: Path) -> None:
+def test_auth_header_helper_rejects_loose_file_permissions(
+    tmp_path: Path, load_script, run_main
+) -> None:
     credentials = tmp_path / "credentials.env"
     credentials.write_text(f"CODEX_MCP_TOKEN={'d' * 64}\n", encoding="utf-8")
     credentials.chmod(0o644)
-    result = subprocess.run(
-        [sys.executable, "deploy/auth_headers.py", "codex"],
-        capture_output=True,
-        text=True,
-        env=os.environ | {"SECOND_BRAIN_CREDENTIALS_FILE": str(credentials)},
+    result = run_main(
+        load_script("deploy/auth_headers.py"),
+        "codex",
+        env={"SECOND_BRAIN_CREDENTIALS_FILE": str(credentials)},
     )
     assert result.returncode == 1
     assert "permissions must be 600" in result.stderr
+    assert "d" * 64 not in result.stderr
 
 
-def _helper(tmp_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    credentials = tmp_path / "credentials.env"
-    credentials.write_text(f"CHATGPT_MCP_TOKEN={'e' * 64}\n", encoding="utf-8")
-    credentials.chmod(0o600)
-    return subprocess.run(
-        [sys.executable, "deploy/auth_headers.py", *args],
-        capture_output=True,
-        text=True,
-        env=os.environ | {"SECOND_BRAIN_CREDENTIALS_FILE": str(credentials)},
-    )
+@pytest.fixture
+def helper(tmp_path: Path, load_script, run_main):
+    """Run the header helper's ``main()`` in-process against a private token file."""
+    module = load_script("deploy/auth_headers.py")
+
+    def run(*args: str):
+        credentials = tmp_path / "credentials.env"
+        credentials.write_text(f"CHATGPT_MCP_TOKEN={'e' * 64}\n", encoding="utf-8")
+        credentials.chmod(0o600)
+        return run_main(
+            module, *args, env={"SECOND_BRAIN_CREDENTIALS_FILE": str(credentials)}
+        )
+
+    return run
 
 
-def test_auth_header_helper_accepts_other_principal_with_env_var(
-    tmp_path: Path,
-) -> None:
-    result = _helper(tmp_path, "chatgpt", "--env-var", "CHATGPT_MCP_TOKEN")
+def test_auth_header_helper_accepts_other_principal_with_env_var(helper) -> None:
+    result = helper("chatgpt", "--env-var", "CHATGPT_MCP_TOKEN")
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {"Authorization": "Bearer " + "e" * 64}
 
 
-def test_auth_header_helper_requires_env_var_for_other_principals(
-    tmp_path: Path,
-) -> None:
-    result = _helper(tmp_path, "chatgpt")
+def test_auth_header_helper_requires_env_var_for_other_principals(helper) -> None:
+    result = helper("chatgpt")
     assert result.returncode == 2
     assert "--env-var is required for principal chatgpt" in result.stderr
 
 
-def test_auth_header_helper_rejects_invalid_principal_name(tmp_path: Path) -> None:
-    result = _helper(tmp_path, "Not_Valid", "--env-var", "CHATGPT_MCP_TOKEN")
+def test_auth_header_helper_rejects_invalid_principal_name(helper) -> None:
+    result = helper("Not_Valid", "--env-var", "CHATGPT_MCP_TOKEN")
     assert result.returncode == 2
     assert result.stdout == ""
 
 
-def _run_helper(
-    tmp_path: Path, content: str | None, *args: str
-) -> subprocess.CompletedProcess[str]:
-    credentials = tmp_path / "credentials.env"
-    if content is not None:
-        credentials.write_text(content, encoding="utf-8")
-        credentials.chmod(0o600)
-    return subprocess.run(
-        [sys.executable, "deploy/auth_headers.py", *args],
-        capture_output=True,
-        text=True,
-        env=os.environ | {"SECOND_BRAIN_CREDENTIALS_FILE": str(credentials)},
-    )
+@pytest.fixture
+def run_helper(tmp_path: Path, load_script, run_main):
+    """Run ``main()`` in-process with arbitrary credential-file content."""
+    module = load_script("deploy/auth_headers.py")
+
+    def run(content: str | None, *args: str):
+        credentials = tmp_path / "credentials.env"
+        if content is not None:
+            credentials.write_text(content, encoding="utf-8")
+            credentials.chmod(0o600)
+        return run_main(
+            module, *args, env={"SECOND_BRAIN_CREDENTIALS_FILE": str(credentials)}
+        )
+
+    return run
 
 
-def test_auth_header_helper_rejects_invalid_env_var_name(tmp_path: Path) -> None:
-    result = _run_helper(
-        tmp_path, f"CODEX_MCP_TOKEN={'f' * 64}\n", "codex", "--env-var", "bad-name"
+def test_auth_header_helper_rejects_invalid_env_var_name(run_helper) -> None:
+    result = run_helper(
+        f"CODEX_MCP_TOKEN={'f' * 64}\n", "codex", "--env-var", "bad-name"
     )
     assert result.returncode == 2
     assert result.stdout == ""
@@ -115,24 +121,24 @@ def test_auth_header_helper_rejects_invalid_env_var_name(tmp_path: Path) -> None
     ],
 )
 def test_auth_header_helper_rejects_bad_credential_files(
-    tmp_path: Path, content: str, message: str
+    run_helper, content: str, message: str
 ) -> None:
-    result = _run_helper(tmp_path, content, "codex")
+    result = run_helper(content, "codex")
     assert result.returncode == 1
     assert result.stdout == ""
     assert result.stderr.strip() == message
     assert "g" * 64 not in result.stderr and "h" * 20 not in result.stderr
 
 
-def test_auth_header_helper_reports_missing_file(tmp_path: Path) -> None:
-    result = _run_helper(tmp_path, None, "codex")
+def test_auth_header_helper_reports_missing_file(run_helper) -> None:
+    result = run_helper(None, "codex")
     assert result.returncode == 1
     assert result.stdout == ""
     assert result.stderr.startswith("cannot read local MCP credentials:")
 
 
-def test_auth_header_helper_strips_quotes(tmp_path: Path) -> None:
+def test_auth_header_helper_strips_quotes(run_helper) -> None:
     token = "q" * 48
-    result = _run_helper(tmp_path, f'CODEX_MCP_TOKEN="{token}"\n', "codex")
+    result = run_helper(f'CODEX_MCP_TOKEN="{token}"\n', "codex")
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {"Authorization": f"Bearer {token}"}

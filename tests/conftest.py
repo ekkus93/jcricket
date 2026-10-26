@@ -1,7 +1,11 @@
 """Shared mock fixtures for backend-isolated tests."""
 
+import importlib.util
+import sys
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 import httpx
 import pytest
@@ -111,3 +115,51 @@ def make_conversation():
         return conversation
 
     return make
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+@dataclass(frozen=True)
+class ScriptResult:
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+@pytest.fixture
+def load_script(monkeypatch):
+    """Import a script that lives outside the package, by repository-relative path."""
+
+    def load(relative_path: str) -> ModuleType:
+        path = ROOT / relative_path
+        spec = importlib.util.spec_from_file_location(path.stem, path)
+        module = importlib.util.module_from_spec(spec)
+        # dataclasses look their module up in sys.modules while it executes.
+        monkeypatch.setitem(sys.modules, path.stem, module)
+        spec.loader.exec_module(module)
+        return module
+
+    return load
+
+
+@pytest.fixture
+def run_main(monkeypatch, capsys):
+    """Run ``module.main()`` in-process with patched argv and environment.
+
+    Returns the exit status (``SystemExit`` codes included) and captured output,
+    which is what a subprocess run would have exposed.
+    """
+
+    def run(module: ModuleType, *args: str, env: dict[str, str] | None = None):
+        monkeypatch.setattr(sys, "argv", [module.__name__, *args])
+        for name, value in (env or {}).items():
+            monkeypatch.setenv(name, value)
+        try:
+            status = module.main()
+        except SystemExit as exc:
+            status = exc.code if isinstance(exc.code, int) else 1
+        captured = capsys.readouterr()
+        return ScriptResult(status or 0, captured.out, captured.err)
+
+    return run

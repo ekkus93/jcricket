@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from second_brain_mcp.cli import _conversations, _verify_context_windows
+from second_brain_mcp.cli import _conversations, _verify_context_windows, main
 from second_brain_mcp.config import AppConfig, ModelProfile
 from second_brain_mcp.store import ConversationStore, ModelSelection
 
@@ -221,6 +221,17 @@ token_env: {codex: CLI_CODEX_TOKEN, claude-code: CLI_CLAUDE_TOKEN}
 """
 
 
+def _write_invalid_config(tmp_path: Path, extra: str) -> Path:
+    config_path = tmp_path / "config.yaml"
+    body = VALID_PROFILES
+    if extra.startswith("token_env:"):
+        body = body.replace(
+            "token_env: {codex: CLI_CODEX_TOKEN, claude-code: CLI_CLAUDE_TOKEN}\n", ""
+        )
+    config_path.write_text(body + extra, encoding="utf-8")
+    return config_path
+
+
 @pytest.mark.parametrize(
     ("extra", "message"),
     [
@@ -241,15 +252,27 @@ token_env: {codex: CLI_CODEX_TOKEN, claude-code: CLI_CLAUDE_TOKEN}
     ],
 )
 def test_check_config_reports_errors_without_traceback(
-    tmp_path: Path, extra: str, message: str
+    tmp_path: Path, monkeypatch, capsys, extra: str, message: str
 ) -> None:
-    config_path = tmp_path / "config.yaml"
-    body = VALID_PROFILES
-    if extra.startswith("token_env:"):
-        body = body.replace(
-            "token_env: {codex: CLI_CODEX_TOKEN, claude-code: CLI_CLAUDE_TOKEN}\n", ""
-        )
-    config_path.write_text(body + extra, encoding="utf-8")
+    config_path = _write_invalid_config(tmp_path, extra)
+    monkeypatch.delenv("CLI_CODEX_TOKEN", raising=False)
+    monkeypatch.delenv("CLI_CLAUDE_TOKEN", raising=False)
+    monkeypatch.setattr(
+        sys, "argv", ["second-brain", "--config", str(config_path), "check-config"]
+    )
+    # In-process: main() ends in SystemExit(1) and nothing else escapes it, so
+    # there is no traceback; the entry-point test below checks a real process.
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert err.startswith("second-brain: ")
+    assert message in err
+
+
+def test_check_config_entry_point_exits_1_without_traceback(tmp_path: Path) -> None:
+    """The one subprocess test: the console entry point really runs as a program."""
+    config_path = _write_invalid_config(tmp_path, "log_level: LOUD\n")
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -269,7 +292,7 @@ def test_check_config_reports_errors_without_traceback(
         env=environment,
     )
     assert result.returncode == 1
-    assert message in result.stderr
+    assert "log_level must be" in result.stderr
     assert "Traceback" not in result.stderr
 
 

@@ -34,10 +34,40 @@ def repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _run(repo: Path, todo: str) -> subprocess.CompletedProcess[str]:
-    (repo / "TODO.md").write_text(todo, encoding="utf-8")
+@pytest.fixture
+def check(load_script, run_main):
+    """Run the checker's ``main()`` in-process against ``PATH@COMMIT`` baselines."""
+    module = load_script("scripts/check_todo_integrity.py")
+
+    def run(repo: Path, *baselines: str):
+        arguments = ["--repo", str(repo)]
+        for baseline in baselines:
+            arguments += ["--baseline", baseline]
+        return run_main(module, *arguments)
+
+    return run
+
+
+@pytest.fixture
+def run_todo(repo: Path, check):
+    """Write ``todo`` into the repo and check it against the first commit."""
+
+    def run(todo: str):
+        (repo / "TODO.md").write_text(todo, encoding="utf-8")
+        commit = _git(repo, "rev-list", "--max-parents=0", "HEAD")
+        return check(repo, f"TODO.md@{commit}")
+
+    return run
+
+
+def test_entry_point_exits_1_on_drift_without_a_traceback(repo: Path) -> None:
+    """The one subprocess test: the script really runs as a program."""
     commit = _git(repo, "rev-list", "--max-parents=0", "HEAD")
-    return subprocess.run(
+    (repo / "TODO.md").write_text(
+        BASELINE.replace("Ship the widget.", "Ship part of the widget."),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
         [
             sys.executable,
             str(SCRIPT),
@@ -49,14 +79,17 @@ def _run(repo: Path, todo: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
     )
+    assert result.returncode == 1
+    assert "T-002: requirement text changed" in result.stdout
+    assert "Traceback" not in result.stderr
 
 
-def test_clean_file_with_checked_items_and_evidence_passes(repo: Path) -> None:
+def test_clean_file_with_checked_items_and_evidence_passes(run_todo) -> None:
     todo = BASELINE.replace("- [ ] **T-001**", "- [x] **T-001**").replace(
         "  - Acceptance: the widget is documented.\n",
         "  - Acceptance: the widget is documented.\n  - Evidence: test_widget.\n",
     )
-    result = _run(repo, todo)
+    result = run_todo(todo)
     assert result.returncode == 0, result.stdout
     assert "passed" in result.stdout
 
@@ -83,54 +116,47 @@ def test_clean_file_with_checked_items_and_evidence_passes(repo: Path) -> None:
         ),
     ],
 )
-def test_detects_requirement_drift(repo: Path, todo: str, message: str) -> None:
-    result = _run(repo, todo)
+def test_detects_requirement_drift(run_todo, todo: str, message: str) -> None:
+    result = run_todo(todo)
     assert result.returncode == 1
     assert message in result.stdout
 
 
-def test_owner_decision_allows_dated_change(repo: Path) -> None:
+def test_owner_decision_allows_dated_change(run_todo) -> None:
     todo = BASELINE.replace(
         "- [ ] **T-002** Ship the widget.",
         "- [ ] **T-002** Ship a smaller widget.\n"
         "  - Owner decision (2026-10-26): ship the smaller widget first.",
     )
-    assert _run(repo, todo).returncode == 0
+    assert run_todo(todo).returncode == 0
 
 
-def test_undated_owner_decision_does_not_allow_change(repo: Path) -> None:
+def test_undated_owner_decision_does_not_allow_change(run_todo) -> None:
     todo = BASELINE.replace(
         "- [ ] **T-002** Ship the widget.",
         "- [ ] **T-002** Ship a smaller widget.\n"
         "  - Owner decision: ship the smaller widget first.",
     )
-    result = _run(repo, todo)
+    result = run_todo(todo)
     assert result.returncode == 1
     assert "T-002: requirement text changed" in result.stdout
 
 
-def _check(repo: Path, *baselines: str) -> subprocess.CompletedProcess[str]:
-    arguments = [sys.executable, str(SCRIPT), "--repo", str(repo)]
-    for baseline in baselines:
-        arguments += ["--baseline", baseline]
-    return subprocess.run(arguments, capture_output=True, text=True)
-
-
-def test_unknown_baseline_commit_is_reported(repo: Path) -> None:
-    result = _check(repo, "TODO.md@deadbeef")
+def test_unknown_baseline_commit_is_reported(repo: Path, check) -> None:
+    result = check(repo, "TODO.md@deadbeef")
     assert result.returncode == 1
     assert "TODO.md: baseline deadbeef could not be read" in result.stdout
 
 
-def test_missing_todo_file_is_reported(repo: Path) -> None:
+def test_missing_todo_file_is_reported(repo: Path, check) -> None:
     commit = _git(repo, "rev-list", "--max-parents=0", "HEAD")
     (repo / "TODO.md").unlink()
-    result = _check(repo, f"TODO.md@{commit}")
+    result = check(repo, f"TODO.md@{commit}")
     assert result.returncode == 1
     assert "TODO.md: file could not be read" in result.stdout
 
 
-def test_baseline_without_commit_is_a_usage_error(repo: Path) -> None:
-    result = _check(repo, "TODO.md")
+def test_baseline_without_commit_is_a_usage_error(repo: Path, check) -> None:
+    result = check(repo, "TODO.md")
     assert result.returncode == 2
     assert "--baseline must use PATH@COMMIT" in result.stderr
