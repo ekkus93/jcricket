@@ -147,10 +147,14 @@
 
 ## Phase R5 — Reconcile and release (P1)
 
-- [ ] **RM-060** Apply the `SPEC.md` changes from REMEDIATION_SPEC §12 (the Ralph Bridge row only if RM-006 chose option (b)).
-- [ ] **RM-061** Re-evaluate SB-018, SB-019, SB-022, SB-024–SB-026, SB-028, SB-032–SB-035, SB-060, and SB-065 in `docs/TODO.md` against their original wording and the new evidence; check only items that fully pass; add evidence rows to the verification record. Do not change requirement text.
-- [ ] **RM-062** Write `docs/RELEASE_NOTES.md` for v0.1 with features, known limitations (4k usable input, single process, local auth only), external blockers (ChatGPT, systemd lifecycle), and the verification summary (R-05).
-- [ ] **RM-063** Check SB-066 only after RM-061 and RM-062 are complete.
+- [x] **RM-060** Apply the `SPEC.md` changes from REMEDIATION_SPEC §12 (the Ralph Bridge row only if RM-006 chose option (b)).
+  - Applied error-code, inventory truncation, continuation selection, transactional persistence, admin export/retention, trusted-host, single-process, and request-ID guidance. The owner-approved Ralph Bridge removal was already recorded under RM-006.
+- [x] **RM-061** Re-evaluate SB-018, SB-019, SB-022, SB-024–SB-026, SB-028, SB-032–SB-035, SB-060, and SB-065 in `docs/TODO.md` against their original wording and the new evidence; check only items that fully pass; add evidence rows to the verification record. Do not change requirement text.
+  - Re-evaluated requirements without changing their wording. SB-018/019, 022, 024–026, 028, 032–035, and 060 now pass; SB-065 awaits the RM-064 final rerun. Evidence rows were added to `docs/TODO.md`.
+- [x] **RM-062** Write `docs/RELEASE_NOTES.md` for v0.1 with features, known limitations (4k usable input, single process, local auth only), external blockers (ChatGPT, systemd lifecycle), and the verification summary (R-05).
+  - Added `docs/RELEASE_NOTES.md` with the current feature set, limitations, blockers, and phase verification evidence.
+- [x] **RM-063** Check SB-066 only after RM-061 and RM-062 are complete.
+  - SB-066 was checked after the evidence reconciliation and release notes were complete; final verification is tracked by RM-064.
 - [ ] **RM-064** Final full check: `uv sync --locked`, Ruff check, Ruff format check, `uv run pytest` (mocked), and `SECOND_BRAIN_LIVE=1 uv run pytest -m live` (live). Record the commit hash and results.
 
 **Gate R5:** Every review finding is closed or explicitly deferred with an owner-approved note; `TODO.md` checkboxes match the original requirements and recorded evidence.

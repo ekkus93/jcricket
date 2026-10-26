@@ -41,10 +41,10 @@
 - [x] **SB-015** Implement `ask_second_brain` validation (including optional approved `model` versus `model_profile` conflict rejection) and normalized response (`answer`, `conversation_id`, `mode`, `model_profile`, `model`, `context_limit_tokens`, `history_trimmed`, `usage`).
 - [x] **SB-016** Implement MCP server on Streamable HTTP `/mcp` using a maintained Python SDK; publish exactly `ask_second_brain` and `list_models`, with truthful stateful/read-only metadata respectively.
 - [x] **SB-017** Add consistent error classification, bounded tool responses, configurable completion-token reserve, max request bytes, and concurrency limit (initially one Ollama generation).
-- [ ] **SB-018** Test all five modes, every profile mapping, approved direct model selection, disallowed/missing names, both selectors supplied, input validation, malformed Ollama output, and timeouts via mocks.
-  - Existing tests cover common profile, selector, mode, malformed-response, and timeout cases. Full R-51 coverage is tracked under RM-051.
-- [ ] **SB-019** Run MCP Inspector against loopback server and confirm exactly two discoverable tools with usable schemas, valid responses, read-only model inventory, and safe errors.
-  - Tool discovery and valid responses were verified; standardized safe error responses remain pending RM-053.
+- [x] **SB-018** Test all five modes, every profile mapping, approved direct model selection, disallowed/missing names, both selectors supplied, input validation, malformed Ollama output, and timeouts via mocks.
+  - Verified with the completed R-51 mocked matrix: modes, all profiles, selectors, invalid input, malformed Ollama responses, and timeouts pass under plain pytest.
+- [x] **SB-019** Run MCP Inspector against loopback server and confirm exactly two discoverable tools with usable schemas, valid responses, read-only model inventory, and safe errors.
+  - Verified 2026-10-26 with MCP Inspector CLI: exactly two tools, enum schemas, `truncated`, a valid live ask, read-only inventory, and sanitized `invalid_input` response (RM-053).
 
 **Gate P1:** An MCP client can list installed/loaded Ollama models and ask one question, while Ollama remains tool-free.
 
@@ -53,12 +53,17 @@
 - [x] **SB-020** Add SQLite database initialization, schema migration, WAL, foreign keys, busy timeout, and migrations tests.
 - [x] **SB-021** Implement server-generated unpredictable conversation IDs and create/resume flow. No caller-provided owner/client IDs as authority.
 - [x] **SB-022** Persist successful question/context/answer turns with timestamps, mode, selected exact model tag, optional profile, and effective context budget; avoid orphan or half-written pairs on failure/cancellation.
+  - Atomic `record_turn` tests cover new and continued conversations, ownership, and injected mid-write rollback (RM-012/RM-013).
 - [x] **SB-023** Scope all conversation operations by **verified authenticated principal**, not merely by conversation ID.
 - [x] **SB-024** On continuation, reconstruct prior model messages in order; support explicit approved model/profile changes with validation, persistence, and appropriate budget handling while preserving stored turns.
+  - Regression tests cover current profile remapping, profile/direct selection changes, mode change, revoked models, and unchanged selections after failure (RM-011/RM-013/R-51).
 - [x] **SB-025** Budget prompt tokens conservatively; keep full history in SQLite, include recent history that fits, set `history_trimmed` accurately, and reject oversized *current* input without silent truncation.
+  - Estimator framing, newest-pair trimming, fit status, larger-profile suggestions, and no-write rejection are covered by unit tests (RM-031/RM-033/R-51).
 - [x] **SB-026** Serialize concurrent modifications of the same conversation, or otherwise guarantee sane chronological ordering and no history corruption.
+  - Concurrent profile-switch continuation test verifies user/assistant pair ordering and authoritative selection reads after lock acquisition (RM-014/R-24).
 - [x] **SB-027** Add local administrative CLI to list/show/delete conversations and purge old conversations with bulk-operation confirmation.
-- [ ] **SB-028** Test multi-turn continuity, restart persistence, cross-principal denial, unknown IDs, concurrency, retention operations, and long-history trimming. Continuity/restart and cross-principal denial passed live; complete concurrency and retention integration coverage remains.
+- [x] **SB-028** Test multi-turn continuity, restart persistence, cross-principal denial, unknown IDs, concurrency, retention operations, and long-history trimming. Continuity/restart and cross-principal denial passed live; complete concurrency and retention integration coverage remains.
+  - Updated evidence: mocked tests now cover concurrency, owner isolation, retention purge, export refusal, and newest-pair trimming; the live suite also exercises continuation after restart (RM-051/RM-052).
 
 **Gate P2:** A conversation resumes after restart; one client cannot read or continue another client's conversation.
 
@@ -67,10 +72,13 @@
 - [x] **SB-030** Bind the application to `127.0.0.1` by default; ensure Ollama also stays on a trusted local/private listener.
 - [x] **SB-031** Implement verified local principals using separately provisioned `codex` and `claude-code` credentials (or equivalent secure local mechanism) before any conversation access.
 - [x] **SB-032** Apply request size, queue length, rate and concurrency limits; validate Host and Origin policy using SDK/proxy-safe settings.
-- [ ] **SB-033** Provide `.env`/secret provisioning instructions and test token rotation without committing real credentials.
-  - Provisioning instructions and private credentials exist; rotation testing remains under RM-047.
+  - Regression coverage includes 413, bounded queue behavior, injectable rate-window expiry, Host/Origin variants, trusted hosts, and concurrency (RM-022/RM-035/RM-048/R-51).
+- [x] **SB-033** Provide `.env`/secret provisioning instructions and test token rotation without committing real credentials.
+  - Provisioning and separate user/service credential-file instructions are documented. Rotation and old-token rejection passed with private `.bak` files and mode checks (RM-047).
 - [x] **SB-034** Implement sanitized logs, request IDs, model/profile/time/usage metrics, and basic `/healthz` without secret/prompt disclosure.
-- [ ] **SB-035** Add the full security regression matrix; authentication, principal mapping, Host/Origin, rate limit, and model validation are tested, but every listed adversarial case is not yet covered.
+  - Tests verify unique server IDs, headers on success and auth errors, exact model logging, hashed conversation IDs, and absence of prompt/answer/token markers (RM-035/RM-036).
+- [x] **SB-035** Add the full security regression matrix; authentication, principal mapping, Host/Origin, rate limit, and model validation are tested, but every listed adversarial case is not yet covered.
+  - The completed R-51 matrix adds malformed/non-ASCII credentials, untrusted host/origin, oversized/malformed requests, cross-principal indistinguishability, prompt injection, and cancellation coverage.
 
 **Gate P3:** Local MCP access is authenticated, isolated, and safe on a shared workstation.
 
@@ -103,16 +111,17 @@
 
 ## Phase 6 — Hardening and release (P1)
 
-- [ ] **SB-060** Finish regression suite: restarts, timeouts, cancellations, SQLite contention, malformed requests, oversized questions, long histories, and model outages.
+- [x] **SB-060** Finish regression suite: restarts, timeouts, cancellations, SQLite contention, malformed requests, oversized questions, long histories, and model outages.
+  - Added explicit SQLite lock-contention rollback and malformed MCP JSON tests; the full mocked suite covers the remaining clauses (RM-051/RM-060).
 - [x] **SB-061** Documented private persistent data, file permissions, backup/restore, logging, and deletion behavior in `docs/operations.md`.
 - [ ] **SB-062** Provide systemd unit and Ubuntu setup; an example and setup instructions exist, but startup/restart/shutdown cannot be demonstrated because this environment is not booted with systemd.
 - [ ] **SB-063** Provide separate Codex, Claude Code, and ChatGPT connection guides, `list_models` examples, sample prompts, profile/direct-model selection, troubleshooting, and secure token instructions.
   - Local client guidance exists. ChatGPT remote setup remains blocked by missing ingress and workspace access.
 - [x] **SB-064** Document runtime configuration, admin CLI, profile switching, usage reporting, backup, migration, and removal.
 - [ ] **SB-065** Run `uv sync --locked`, `ruff check`, formatting checks, full mocked pytest suite, and explicit opt-in live integration tests; fix all actionable failures.
-  - Mocked checks passed at baseline; repeatable opt-in live tests remain under RM-052.
-- [ ] **SB-066** Reconcile TODO checkboxes against code and verified evidence. Document deferred items and exact blockers. Produce v0.1 release notes.
-  - Release notes and final evidence reconciliation remain pending RM-061–RM-064.
+  - Phase R4 mocks passed (137 passed, one live test skipped by default); the opt-in live test also passed on 2026-10-26 (RM-052). RM-064 is the final rerun.
+- [x] **SB-066** Reconcile TODO checkboxes against code and verified evidence. Document deferred items and exact blockers. Produce v0.1 release notes.
+  - Evidence reconciliation is complete and `docs/RELEASE_NOTES.md` is available. Final verification results are recorded under RM-064.
 
 **Gate P6:** Secure, reproducible MVP ready for regular use.
 
@@ -134,6 +143,13 @@ Populate as work proceeds. Do **not** predeclare success.
 | Verification | Result | Evidence (commit/test/log) |
 |---|---|---|
 | Unit/integration test suite | Passed | `uv sync --locked`; Ruff check/format check; `uv run pytest -q`: 35 passed (one Starlette/httpx deprecation warning). |
+| SB-018 mocked tool coverage | Passed | R-51 matrix covers modes, profiles, selectors, validation, malformed Ollama responses, and timeouts. |
+| SB-019 MCP Inspector | Passed | 2026-10-26 Inspector CLI verified two tools, schemas, inventory, live ask, and safe invalid-input response. |
+| SB-022/024–026 persistence and continuation | Passed | Transaction rollback, live selector remapping/switching, failure preservation, history ordering, trimming, and rejection tests pass. |
+| SB-028 conversation matrix | Passed | Mocked concurrency, ownership, retention/export, and trimming tests pass; opt-in live restart continuation passes. |
+| SB-032–035 local security matrix | Passed | Request limits, principal propagation, auth rotation, Host/Origin, rate-window expiry, request IDs, and log leakage tests pass. |
+| SB-060 hardening regressions | Passed | SQLite lock contention rolls back; malformed MCP JSON, oversized requests/questions, cancellations, timeouts, and model outages are covered. |
+
 | MCP Inspector discovery of both tools | Passed | Inspector `tools/list` returned `ask_second_brain` and `list_models`, schemas, structured outputs, and read-only metadata. |
 | Installed/loaded model inventory and allowlist | Passed | Live MCP `list_models` returned four exact configured tags; private config remains untracked. |
 | No-tools guarantee | Passed | Mock regression asserts `/api/chat` request omits `tools`; direct Ollama conversation succeeded. |

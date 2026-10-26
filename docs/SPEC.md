@@ -129,7 +129,7 @@ The server—not the caller—determines the authenticated principal. **Do not a
 
 `model_profile` is `null` when an explicit approved model is used without a named profile; `context_limit_tokens` is the server-enforced effective budget for that selection, not a claim about intrinsic model capability. `usage` fields can be `null` where the Ollama backend does not report them. Do not fabricate usage. Return only the current answer and metadata, **not** the entire saved conversation. Exclude hidden reasoning traces from tool output and persisted conversation text unless explicitly enabled by a future design review.
 
-**Failure behavior:** return a clear, sanitized tool error for invalid input, inaccessible conversation, unauthorized client, unknown configured profile, context exceeding limits, Ollama unavailable, model unavailable, and timeout. Do not include bearer tokens, raw private prompts, internal stack traces, or raw SQLite rows in errors.
+**Failure behavior:** return errors in the stable form `<code>: <message>` for invalid input, inaccessible conversation, unauthorized client, unknown configured profile, context exceeding limits, Ollama unavailable, model unavailable, and timeout. Codes include `invalid_input`, `conversation_unavailable`, `model_not_approved`, `model_not_installed`, `context_too_large`, `busy`, `ollama_unavailable`, `ollama_timeout`, `ollama_bad_response`, `unauthorized`, and `internal_error`. Messages are fixed and sanitized; never include bearer tokens, raw private prompts, internal stack traces, or raw SQLite rows in client-visible errors.
 
 ### 4.2 `list_models`
 
@@ -138,6 +138,8 @@ The server—not the caller—determines the authenticated principal. **Do not a
 **Input:** None (an empty JSON object). Every call requires the same authenticated MCP principal as `ask_second_brain`.
 
 **Backend:** Fetch `GET /api/tags` for the installed model inventory and `GET /api/ps` for currently loaded models. Correlate by exact model tag and annotate with server-side configuration. Do not infer a model's maximum context window solely from its name or `/api/tags`. The running `context_length` value reflects a loaded model's current allocation, not a guarantee about the model's native capabilities. Handle an empty inventory and Ollama unavailability clearly.
+
+Return at most `MAX_LISTED_MODELS = 200` entries and include `truncated: boolean`. When the inventory is truncated, keep all configured and approved model tags in the result.
 
 **Example output** (illustrative names and numbers, not claims about actual installed models):
 
@@ -202,7 +204,7 @@ ollama:
   allowed_models: {}
 ```
 
-These model tags are **placeholders**, not actual installed names. Startup and `list_models` use `GET /api/tags` to discover installed tags, with optional `GET /api/ps` to report runtime status; configured tags absent from the inventory must fail with a useful explanation when selected. An approved model is one referenced by a configured profile or explicitly listed in `allowed_models` with an administrator-set context budget. `ask_second_brain(model=...)` accepts exact approved tags only, never an arbitrary user-supplied installed name. Supplying both `model_profile` and `model` is invalid; when both are omitted on a new discussion, default to `32k`. Respect existing per-model Ollama configuration; set `options.num_ctx` only where necessary, consistent with the selected profile, and verify the effective allocation. A configured context size is an **upper bound**, not evidence that answer quality or inference speed remains constant at that length.
+These model tags are **placeholders**, not actual installed names. Startup and `list_models` use `GET /api/tags` to discover installed tags, with optional `GET /api/ps` to report runtime status; configured tags absent from the inventory must fail with a useful explanation when selected. An approved model is one referenced by a configured profile or explicitly listed in `allowed_models` with an administrator-set context budget. `ask_second_brain(model=...)` accepts exact approved tags only, never an arbitrary user-supplied installed name. Supplying both `model_profile` and `model` is invalid; when both are omitted on a new discussion, default to `32k`. On every continuation, resolve a stored profile through the current profile mapping and require a stored direct model to remain approved with its current budget. An optional per-profile or per-model `completion_tokens` reserve overrides the global reserve. Respect existing per-model Ollama configuration; set `options.num_ctx` only where necessary, consistent with the selected profile, and verify the effective allocation. A configured context size is an **upper bound**, not evidence that answer quality or inference speed remains constant at that length.
 
 Chat requests use `POST /api/chat` with `model`, `messages`, `stream: false`, and supported options/keep-alive. **Do not include a `tools` field**. For `list_models`, make only read-only inventory/status calls. Do not expose arbitrary Ollama endpoints or accept unapproved arbitrary model names.
 
@@ -240,7 +242,7 @@ messages(
 )
 ```
 
-The exact schema can evolve via numbered migrations. Enable foreign keys and appropriate indexes. Use SQLite WAL and a busy timeout; serialize writes within the same conversation. Store the exact model tag and its validated context budget with every conversation (and track changes when explicitly switched), so resumed discussions behave predictably. Store only successful turns as complete question/answer pairs. Avoid duplicate partial messages after failed requests; optionally add idempotency keys in a future revision.
+The exact schema can evolve via numbered migrations. Enable foreign keys and appropriate indexes. Use SQLite WAL and a busy timeout; serialize writes within the same conversation. Store the exact model tag and its validated context budget with every conversation (and track changes when explicitly switched), so resumed discussions behave predictably. Insert a new conversation row and its first question/answer pair in one transaction; for continuations, verify ownership and commit selection changes, `updated_at`, and the successful question/answer pair together. Store only successful turns as complete question/answer pairs. Avoid duplicate partial messages after failed requests; optionally add idempotency keys in a future revision.
 
 ### 6.2 Ownership and isolation
 
@@ -265,11 +267,13 @@ Provide a **local administrator CLI**, not additional model-visible MCP tools:
 ```text
 second-brain conversations list [--principal ...]
 second-brain conversations show <conversation-id>
+second-brain conversations get-any <conversation-id>
 second-brain conversations delete <conversation-id>
-second-brain conversations purge --older-than <days>
+second-brain conversations purge [--older-than <days>]
+second-brain conversations export [<conversation-id>] [--principal P] [--output FILE]
 ```
 
-Require an explicit confirmation for destructive bulk purge. Keep SQLite at a configured path with restrictive file permissions; support backups, export, and configurable retention. The default is **no automatic retention purge**, documented clearly. Never store or print credentials in conversation rows or ordinary logs.
+Require confirmation for destructive delete and bulk purge unless `--yes` is supplied; EOF or non-interactive input means cancel. `purge` uses `retention_days` when `--older-than` is omitted. Retention is never applied automatically by the server, and the default is **no automatic retention purge**. Export JSON to stdout or create a new output file with mode `0600` and refuse to overwrite an existing path. Keep SQLite at a configured path with restrictive file permissions and support backups. Never store or print credentials in conversation rows or ordinary logs.
 
 ## 7. Connectivity and security
 
@@ -281,7 +285,7 @@ A local `stdio` adapter may be added only if actual client compatibility require
 
 ### 7.2 Remote ChatGPT integration
 
-Expose a stable MCP endpoint (typically `https://<private-host>/mcp`) through a trusted HTTPS reverse proxy or supported private MCP tunnel. Ollama and SQLite stay on the trusted host. The proxy must enforce appropriate Host/Origin policy, TLS, request size limits, and safe forwarded headers.
+Expose a stable MCP endpoint (typically `https://<private-host>/mcp`) through a trusted HTTPS reverse proxy or supported private MCP tunnel. Ollama and SQLite stay on the trusted host. The proxy must enforce appropriate Host/Origin policy, TLS, request size limits, and safe forwarded headers. `trusted_hosts` is an explicit list of bare DNS names accepted by both the server Host check and MCP transport security; it does not establish remote authentication.
 
 **Do not assume that a static shared bearer token is sufficient for ChatGPT.** Evaluate the *actual* available connection flow and, where applicable, implement OAuth 2.1-compatible MCP protected-resource metadata, authorization-server integration, PKCE, correctly scoped/audience-bound tokens, and token verification. Reuse an existing trustworthy identity provider if it conforms to the current requirements. Do not write a custom OAuth provider solely to meet the MVP if an existing supported solution is available.
 
@@ -305,6 +309,7 @@ ChatGPT custom MCP connectivity is a **product/workspace capability**, separate 
 
 - Expose a minimal, non-sensitive local `/healthz` endpoint that checks server process health. Authenticated `list_models` covers safe inventory and loaded-status discovery; local diagnostics may additionally test connection health. Do not leak internal paths, model inventories, or secrets from public unauthenticated endpoints.
 - Use structured logs with request correlation IDs, principal, model profile, elapsed time, token counts when available, and categorized error status. **Do not log message contents by default.**
+- Run one server process because concurrency admission and per-conversation locks are in memory. Return a server-generated `X-Request-ID` response header on every HTTP response, including authentication and host-policy failures.
 - Fail fast and clearly if Ollama is down, the chosen model is missing, the database cannot be opened, credentials are invalid, or the response exceeds operational limits.
 - Handle cancellation and shutdown without leaving incomplete conversation turns.
 - Provide a systemd unit and a non-root, direct-host deployment guide; Docker/Podman are not required or part of acceptance.
