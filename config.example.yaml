@@ -1,7 +1,7 @@
 ollama_base_url: http://127.0.0.1:11434
 database_path: ~/.local/share/second-brain/conversations.sqlite3
 host: 127.0.0.1
-port: 8000
+port: 18765
 default_profile: 32k
 # Each profile needs its own model variant whose context window is at least its
 # budget. Some models (including Qwen3.5) ignore the request's num_ctx, so build

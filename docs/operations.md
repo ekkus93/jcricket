@@ -2,7 +2,7 @@
 
 ## Local development
 
-Use Python 3.12 managed by `uv`; from the repository root run `uv sync --locked`, copy `config.example.yaml` to the ignored `config.yaml`, and replace each placeholder with the exact output of `ollama list`. Create local credentials with `uv run python scripts/init_credentials.py`, then start with `scripts/run_local.sh`. Check setup with `uv run second-brain --config config.yaml check-config`. The default listener is `127.0.0.1:8000`; the default database is `~/.local/share/second-brain/conversations.sqlite3`.
+Use Python 3.12 managed by `uv`; from the repository root run `uv sync --locked`, copy `config.example.yaml` to the ignored `config.yaml`, and replace each placeholder with the exact output of `ollama list`. Create local credentials with `uv run python scripts/init_credentials.py`, then start with `scripts/run_local.sh`. Check setup with `uv run second-brain --config config.yaml check-config`. The default listener is `127.0.0.1:18765`; the default database is `~/.local/share/second-brain/conversations.sqlite3`.
 
 ### Model variants and context windows
 

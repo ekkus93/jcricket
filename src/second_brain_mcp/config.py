@@ -57,7 +57,7 @@ class AppConfig(StrictModel):
     ollama_base_url: str = "http://127.0.0.1:11434"
     database_path: Path = Path("~/.local/share/second-brain/conversations.sqlite3")
     host: str = "127.0.0.1"
-    port: int = Field(default=8000, ge=1, le=65535)
+    port: int = Field(default=18765, ge=1, le=65535)
     default_profile: str = "32k"
     profiles: dict[str, ModelProfile]
     allowed_models: dict[str, AllowedModel] = Field(default_factory=dict)

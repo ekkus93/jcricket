@@ -4,7 +4,7 @@
 # Before enabling, create the service user and, as that user, the profile:
 #   sudo -u second-brain-tunnel HOME=/var/lib/second-brain-tunnel \
 #     tunnel-client init --sample sample_mcp_remote_no_auth --profile second-brain \
-#       --tunnel-id tunnel_xxx --mcp-server-url http://127.0.0.1:8000/mcp \
+#       --tunnel-id tunnel_xxx --mcp-server-url http://127.0.0.1:18765/mcp \
 #       --health-listen-addr 127.0.0.1:18081
 # (with the variables from /etc/second-brain/tunnel.env exported), then add the
 # `mcp.extra_headers` block described in docs/integrations/local-clients.md with

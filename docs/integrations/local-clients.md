@@ -1,14 +1,14 @@
 # Local client setup
 
-The local server exposes Streamable HTTP at `http://127.0.0.1:8000/mcp` and uses independent tokens for `codex` and `claude-code`. Create the user credential file once with `uv run python scripts/init_credentials.py`; it writes `~/.config/second-brain/credentials.env` with mode `0600`. It refuses to overwrite an existing file. Start the server with `scripts/run_local.sh`. The helper reads the user credential file and emits only the requested bearer header as JSON; it never prints tokens to stderr or a log. For systemd, `/etc/second-brain/credentials.env` is a separate service credential file, read by systemd and normally owned by `root:second-brain` with mode `0640`. The helper does not read the service file.
+The local server exposes Streamable HTTP at `http://127.0.0.1:18765/mcp` and uses independent tokens for `codex` and `claude-code`. Create the user credential file once with `uv run python scripts/init_credentials.py`; it writes `~/.config/second-brain/credentials.env` with mode `0600`. It refuses to overwrite an existing file. Start the server with `scripts/run_local.sh`. The helper reads the user credential file and emits only the requested bearer header as JSON; it never prints tokens to stderr or a log. For systemd, `/etc/second-brain/credentials.env` is a separate service credential file, read by systemd and normally owned by `root:second-brain` with mode `0640`. The helper does not read the service file.
 
 ## Codex
 
-Add the server to user configuration with `codex mcp add second-brain --url http://127.0.0.1:8000/mcp`. In `~/.codex/config.toml`, add `http_headers_helper = "python3 /absolute/path/to/jcricket/deploy/auth_headers.py codex"` under `[mcp_servers.second-brain]`. Check `codex mcp list`; then start a fresh Codex session and verify `list_models`, a question, a continuation, and persistence across restart.
+Add the server to user configuration with `codex mcp add second-brain --url http://127.0.0.1:18765/mcp`. In `~/.codex/config.toml`, add `http_headers_helper = "python3 /absolute/path/to/jcricket/deploy/auth_headers.py codex"` under `[mcp_servers.second-brain]`. Check `codex mcp list`; then start a fresh Codex session and verify `list_models`, a question, a continuation, and persistence across restart.
 
 ## Claude Code
 
-Add the user-scoped server with `claude mcp add-json second-brain '{"type":"http","url":"http://127.0.0.1:8000/mcp","headersHelper":"python3 /absolute/path/to/jcricket/deploy/auth_headers.py claude-code"}' --scope user`. Verify `claude mcp get second-brain` and `/mcp`, then run the same tool and persistence checks in a fresh session.
+Add the user-scoped server with `claude mcp add-json second-brain '{"type":"http","url":"http://127.0.0.1:18765/mcp","headersHelper":"python3 /absolute/path/to/jcricket/deploy/auth_headers.py claude-code"}' --scope user`. Verify `claude mcp get second-brain` and `/mcp`, then run the same tool and persistence checks in a fresh session.
 
 Rotate local tokens with `uv run python scripts/init_credentials.py --rotate`. It replaces only the `CODEX_MCP_TOKEN` and `CLAUDE_CODE_MCP_TOKEN` lines, keeps every other line and comment, and saves the previous file as a private `.bak` (replaced on each rotation, so it always holds the immediately previous tokens). If systemd uses the service credential file, include `--service-file /etc/second-brain/credentials.env` (with suitable privileges) so both files get the same new tokens. Rotation is all-or-nothing: every file is staged before any is replaced, and if a later replacement fails, earlier files are restored and the command exits 1. Then restart the service and reconnect each client.
 
@@ -24,7 +24,7 @@ For a principal other than `codex` or `claude-code`, pass the environment variab
 ChatGPT custom app (connection type: Tunnel)
   -> OpenAI Secure MCP Tunnel            (tied to your ChatGPT workspace)
   -> tunnel-client on this machine        (connects OUTBOUND to OpenAI)
-  -> http://127.0.0.1:8000/mcp            (this server, loopback only)
+  -> http://127.0.0.1:18765/mcp            (this server, loopback only)
 ```
 
 - **No public port, reverse proxy, or OAuth server is needed.** The server stays bound to loopback. `tunnel-client` makes only outbound connections to OpenAI.
@@ -82,7 +82,7 @@ export SECOND_BRAIN_UPSTREAM_AUTH="Bearer $CHATGPT_MCP_TOKEN"   # the whole head
 
 tunnel-client init --sample sample_mcp_remote_no_auth --profile second-brain \
   --tunnel-id tunnel_xxx \
-  --mcp-server-url http://127.0.0.1:8000/mcp \
+  --mcp-server-url http://127.0.0.1:18765/mcp \
   --health-listen-addr 127.0.0.1:18081
 ```
 
@@ -94,7 +94,7 @@ mcp:
     Authorization: "env:SECOND_BRAIN_UPSTREAM_AUTH"
   server_urls:
     - channel: main
-      url: "http://127.0.0.1:8000/mcp"
+      url: "http://127.0.0.1:18765/mcp"
 ```
 
 Then check and run it:
@@ -143,7 +143,7 @@ Use **one tunnel, one profile, one `tunnel-client run` process, and one ChatGPT 
 |---|---|---|---|
 | OpenAI tunnel | `tunnel_aaa…` | `tunnel_bbb…` | `tunnel_ccc…` |
 | `tunnel-client` profile | `ralph-bridge` | `second-brain` | `…` |
-| Upstream | stdio command | `http://127.0.0.1:8000/mcp` | its own port |
+| Upstream | stdio command | `http://127.0.0.1:18765/mcp` | its own port |
 | Health listener | `127.0.0.1:18080` | `127.0.0.1:18081` | `127.0.0.1:18082` |
 | Secrets file (mode `0600`) | its own | its own | its own |
 | Service unit | `ralph-bridge-tunnel` | `second-brain-tunnel` | `…` |
@@ -175,7 +175,7 @@ Use **one tunnel, one profile, one `tunnel-client run` process, and one ChatGPT 
 
 1. Unique profile names and, for services, a separate service user and `HOME` per app so profiles in `~/.config/tunnel-client/` cannot collide.
 2. Unique health listener ports. List what is taken first: `ss -ltn | grep -E ':180[0-9]{2}\b'`.
-3. Unique upstream ports. If another HTTP MCP server already uses `8000`, change `port:` in this server's `config.yaml`, and the profile URL with it.
+3. Unique upstream ports. This server defaults to `18765` rather than the very common `8000`. If another HTTP MCP server already uses that port, change `port:` in this server's `config.yaml`, and the client registrations and the tunnel profile URL with it.
 4. A separate environment file per app containing only that app's secrets. The Second Brain tunnel must never see Ralph's GitHub credentials, and Ralph's must never see `SECOND_BRAIN_UPSTREAM_AUTH`.
 5. Separate service units, named per app (`deploy/second-brain-tunnel.service.example` is one).
 
@@ -189,7 +189,7 @@ If Ralph Bridge runs on a different machine, the tunnels are independent anyway 
 
 - **`doctor` or `/readyz` reports degraded.** Run `tunnel-client doctor --profile second-brain --explain`. Plain HTTP servers should reach ready when OAuth discovery returns 404 on every candidate; a 5xx or malformed metadata response keeps readiness degraded.
 - **Tools scan fails with 401.** The header is not reaching the server: check that the profile has `mcp.extra_headers` with `Authorization: "env:SECOND_BRAIN_UPSTREAM_AUTH"` (or that `MCP_EXTRA_HEADERS` is exported), that `SECOND_BRAIN_UPSTREAM_AUTH` is set in the same shell or service environment file that runs `tunnel-client` and holds `Bearer <token>` (not just the token), and that the server was restarted after adding `CHATGPT_MCP_TOKEN`.
-- **403 from the server.** The Host or Origin check rejected the request. The tunnel calls `http://127.0.0.1:8000/mcp`, which the default policy accepts; a different upstream URL needs a matching `trusted_hosts` entry.
+- **403 from the server.** The Host or Origin check rejected the request. The tunnel calls `http://127.0.0.1:18765/mcp`, which the default policy accepts; a different upstream URL needs a matching `trusted_hosts` entry.
 - **Tool missing or stale.** Rescan while the tunnel is running, then start a new conversation.
 - **Oversized responses.** The Ralph Bridge project recorded a tunnel disconnect on a response of about 10 MiB. This server's responses are bounded by `limits.response_bytes` (256 KiB by default), far below that.
 
