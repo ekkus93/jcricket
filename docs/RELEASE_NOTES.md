@@ -4,9 +4,11 @@
 
 - Local Streamable HTTP MCP server with two tools: `ask_second_brain` and read-only `list_models`.
 - Independent Codex and Claude Code principals, private bearer credentials, and isolated SQLite conversations that survive restarts.
-- Ollama-backed modes, four configured context profiles, approved direct model selection, continuation, and bounded history.
-- Transactional turn persistence, validated model selection, tool errors returned as exactly `<code>: <message>` with eleven fixed codes, request IDs, rate/concurrency limits, and administrative list/show/delete/purge/export commands.
-- `uv`-locked development environment, mocked regression suite, opt-in live Ollama checks, and an Inspector CLI verification path.
+- Ollama-backed modes, four configured context profiles (several profiles may share one model tag), approved direct model selection, continuation, and bounded history that always keeps the newest contiguous turns.
+- Transactional turn persistence, validated model selection, tool errors returned as exactly `<code>: <message>` with eleven fixed codes, request IDs, category-based error log levels, rate/concurrency limits, and administrative list/show/delete/purge/export commands.
+- `check-config` and `serve` report configuration and credential errors on one line without a traceback; placeholder model tags in the example configuration are rejected with a clear message.
+- Credential rotation that rewrites only the token lines, keeps a private backup of the previous file, and rotates user and service files together or not at all.
+- `uv`-locked development environment, mocked regression suite (including a subprocess check that server output never contains prompts or tokens), a TODO requirement-integrity checker, opt-in live Ollama checks, and an Inspector CLI verification path.
 
 ## Known limitations
 
@@ -14,7 +16,10 @@
 - The 4k profile reserves 1024 completion tokens and has about 2.5 KB of usable current input before history; larger contexts may need substantial memory and inference time.
 - Run one server process. Admission control and per-conversation locks are in memory.
 - No shared memory exists between principals. Model quality, tokenization, and actual throughput depend on the installed Ollama models and hardware.
-- The reverse-proxy example is explicitly non-functional until a remote authentication design is approved and implemented.
+- The reverse-proxy example is explicitly non-functional until a remote authentication design is approved and implemented; it clears client `Authorization` headers.
+- uvicorn's access log records request paths including query strings. The server never reads prompts or credentials from the query string.
+- Live Codex and Claude Code client checks (SB-052, SB-053) were recorded against earlier code and still need a re-run on the current code, including a server restart.
+- Gate R1's "regression tests failed before the fix" evidence covers 3 of the 12 round-1 bugs; the other 9 tests could not run against the pre-fix code (see `docs/REMEDIATION_TODO.md`). Every round-2 fix has recorded fail-first evidence.
 
 ## External blockers
 
@@ -23,7 +28,7 @@
 
 ## Verification summary
 
-- `uv sync --locked`, Ruff lint and format checks, and the mocked pytest suite pass. The phase R4 run reported 137 passed, one opt-in live test skipped by default, and one Starlette/httpx deprecation warning.
-- The opt-in live test passed against the workstation's Ollama installation and private config, including model inventory, a two-turn conversation, restart persistence, cross-principal denial, and an MCP client schema/error check.
-- MCP Inspector CLI verification found exactly two tools, enum schemas and the inventory `truncated` field; a live ask returned usage, and an invalid question returned a sanitized MCP tool error.
+- `uv sync --locked`, Ruff lint and format checks, the mocked pytest suite, and `scripts/check_todo_integrity.py` pass. Final results for the release commit are recorded in `docs/REMEDIATION_2_TODO.md` (RM2-040).
+- The opt-in live test and MCP Inspector checks passed on 2026-10-26 against round-1 code; RM2-040 records whether they were repeated on the final round-2 code.
+- `4k`, `128k`, and `256k` were re-measured live on 2026-10-26: 2,274 ms (100% GPU), 3,521 ms (100% GPU), and 4,177 ms (7%/93% CPU/GPU) respectively.
 - ChatGPT remote integration and a live systemd lifecycle remain unverified external blockers.

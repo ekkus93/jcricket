@@ -148,7 +148,8 @@
   - Note: the owner-decision record is based on the owner commissioning REMEDIATION_2 and directing its implementation, not on a separate explicit approval of the R-35 wording; it is flagged for owner confirmation.
 - [ ] **RM2-032** Re-evaluate SB-025, SB-033, SB-066 in `docs/TODO.md` and RM-025, RM-026, RM-047, RM-048, RM-061, RM-063 in `docs/REMEDIATION_TODO.md` against their unchanged text and the new evidence, adding `Evidence:` sub-bullets.
   - Acceptance: the integrity checker reports zero violations; every checked item has evidence that covers each clause.
-- [ ] **RM2-033** Update `docs/RELEASE_NOTES.md` so every listed guarantee is delivered and every known limitation matches the open items (R2-05).
+- [x] **RM2-033** Update `docs/RELEASE_NOTES.md` so every listed guarantee is delivered and every known limitation matches the open items (R2-05).
+  - Evidence: `docs/RELEASE_NOTES.md` lists only delivered behavior (exact error text, contiguous trimming, shared profile tags, one-line config errors, line-preserving all-or-nothing rotation, leakage and integrity checks) and names every open item: SB-052/SB-053 live re-runs, the Gate R1 3-of-12 limitation, ChatGPT and systemd blockers, and query strings in access logs. The old "137 passed" and "sanitized" claims are replaced with pointers to the RM2-040 record.
 
 ## Phase E — Final verification (P0)
 
