@@ -170,11 +170,8 @@ class SecondBrainService:
             )
         if conversation is None:
             profile_name = self.config.default_profile
-            profile = self.config.profiles.get(profile_name)
-            if profile is None:
-                raise ServiceError(
-                    "model_not_approved", "no model profile is configured"
-                )
+            # AppConfig.known_default_profile and require_profiles guarantee this.
+            profile = self.config.profiles[profile_name]
             return ModelSelection(
                 profile_name,
                 profile.model,

@@ -51,16 +51,20 @@
 
 ## Phase C — Service continuation and validation (P0)
 
-- [ ] **TCT-020** Direct-model continuation (TC-20).
+- [x] **TCT-020** Direct-model continuation (TC-20).
   - Test: a conversation created with `model="other:tag"` continues without a selector after the configured budget for `other:tag` changes; the response has `model: "other:tag"`, `model_profile: null`, and the new budget, and the stored row has the new budget.
-- [ ] **TCT-021** Stored profile no longer configured (TC-21).
+  - Evidence: `tests/unit/test_service_continuation.py::test_direct_model_continuation_uses_current_budget` (8192 → 16384; response and stored row both show `other:tag`, `None`, 16384). No defect found.
+- [x] **TCT-021** Stored profile no longer configured (TC-21).
   - Test: a row stored with profile `legacy` fails on continuation with exactly `model_not_approved: this conversation's profile is no longer approved; choose a profile`, and no turn is written.
-- [ ] **TCT-022** Remaining service validation branches (TC-22).
+  - Evidence: `test_continuation_rejects_profile_missing_from_config` (exact text; history still 2 rows).
+- [x] **TCT-022** Remaining service validation branches (TC-22).
   - Test: approved direct model missing from `/api/tags` → exactly `model_not_installed: model tag "other:tag" is not installed in Ollama`.
   - Test: `conversation_id="   "` → `invalid_input: conversation_id must not be empty`; direct `service.ask(..., mode="nope")` → `invalid_input: mode is not supported`.
   - Test: a history whose first row is an orphan `assistant` turn builds messages without that row.
-- [ ] **TCT-023** Remove the unreachable default-profile check in `SecondBrainService._selection`, with a comment naming the validator that guarantees the profile exists (TC-80).
+  - Evidence: `test_missing_direct_model_names_the_tag`, `test_service_rejects_blank_conversation_id_and_unknown_mode` (both exact texts), and `test_orphan_assistant_row_is_left_out_of_the_prompt`. That last test goes through `ask`, with the orphan row inserted by SQL, and checks the messages actually sent to `/api/chat` are `first question`, `first answer`, `current`.
+- [x] **TCT-023** Remove the unreachable default-profile check in `SecondBrainService._selection`, with a comment naming the validator that guarantees the profile exists (TC-80).
   - Acceptance: `test_default_selection_is_32k` passes; the `no model profile is configured` branch is gone; the full suite passes.
+  - Evidence: `_selection` now indexes `self.config.profiles[profile_name]` with a comment naming `known_default_profile` and `require_profiles`; the message no longer appears under `src/` or `tests/`. `test_default_selection_is_32k` passes; full suite 227 passed, 1 skipped; `service.py` is 100% line and branch.
 
 ## Phase D — Credential and config validation (P0)
 
