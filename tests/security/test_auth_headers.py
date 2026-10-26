@@ -96,6 +96,7 @@ def test_auth_header_helper_rejects_invalid_env_var_name(tmp_path: Path) -> None
     assert result.returncode == 2
     assert result.stdout == ""
     assert "environment variable name is invalid" in result.stderr
+    assert "f" * 64 not in result.stderr
 
 
 @pytest.mark.parametrize(

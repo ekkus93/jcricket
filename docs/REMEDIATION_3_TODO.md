@@ -54,11 +54,13 @@
 
 ## Phase C — Test strictness and hygiene (P1)
 
-- [ ] **RM3-020** Replace `match=` with exact comparison via `_value_error_message` for every TC-31 and TC-32 case in `tests/unit/test_config_validation.py` (R3-20).
+- [x] **RM3-020** Replace `match=` with exact comparison via `_value_error_message` for every TC-31 and TC-32 case in `tests/unit/test_config_validation.py` (R3-20).
   - Acceptance: no `match=` remains in that file; each pydantic case unpacks exactly one error; all cases pass.
-- [ ] **RM3-021** Tighten the boundary and leakage assertions (R3-21).
+  - Evidence: `tests/unit/test_config_validation.py` gains `_value_error_message` (`[detail] = error.errors()` then the message with `Value error, ` removed); every TC-31 and TC-32 case now asserts `== message`. `grep -n "match="` over the file finds nothing; 21 tests pass.
+- [x] **RM3-021** Tighten the boundary and leakage assertions (R3-21).
   - Test: `test_two_hundred_selectable_tags_are_allowed` asserts `len(allowed_models) == 196` and that the 200 selectable tags are distinct.
   - Test: `test_auth_header_helper_rejects_invalid_env_var_name` asserts the 64-character token is absent from `stderr`.
+  - Evidence: `test_two_hundred_selectable_tags_are_allowed` now asserts `len(allowed_models) == 196` and 200 distinct selectable tags; `test_auth_header_helper_rejects_invalid_env_var_name` asserts `"f" * 64 not in result.stderr`. Both pass.
 - [ ] **RM3-022** Test hygiene and the `_conversations` signature (R3-22).
   - Acceptance: `test_failed_replacement_restores_already_rotated_files` uses `_module()`, which is defined before its first use; the two `module.os` patches carry the required comment.
   - Acceptance: `cli._conversations(database_path, retention_days, args)` replaces the duck-typed signature; `main()` passes `config.database_path, config.retention_days`; `getattr(config, "database_path", config)` no longer exists; every caller in `tests/` passes explicit arguments; the full suite passes.

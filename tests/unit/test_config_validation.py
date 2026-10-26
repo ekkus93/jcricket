@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from second_brain_mcp.config import AppConfig, ModelProfile, load_config
 
@@ -18,6 +19,15 @@ def _profiles() -> dict[str, ModelProfile]:
 
 def _message(exc_info: pytest.ExceptionInfo) -> str:
     return str(exc_info.value)
+
+
+def _value_error_message(exc_info: pytest.ExceptionInfo) -> str:
+    """Exact validator message; unpacking proves there was exactly one error."""
+    error = exc_info.value
+    if isinstance(error, ValidationError):
+        [detail] = error.errors()
+        return detail["msg"].removeprefix("Value error, ")
+    return str(error)
 
 
 # TC-30: credentials
@@ -82,8 +92,9 @@ def test_credentials_return_principal_token_map(monkeypatch) -> None:
     ],
 )
 def test_rejects_invalid_ollama_urls(url: str, message: str) -> None:
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError) as exc_info:
         AppConfig(profiles=_profiles(), ollama_base_url=url)
+    assert _value_error_message(exc_info) == message
 
 
 @pytest.mark.parametrize(
@@ -134,13 +145,19 @@ def test_accepts_loopback_ollama_urls(url: str, stored: str) -> None:
 )
 def test_field_validation_messages(overrides: dict, message: str) -> None:
     arguments = {"profiles": _profiles()} | overrides
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError) as exc_info:
         AppConfig(**arguments)
+    assert _value_error_message(exc_info) == message
 
 
 def test_two_hundred_selectable_tags_are_allowed() -> None:
     allowed = {f"extra:{index}": 8192 for index in range(196)}
-    assert len(AppConfig(profiles=_profiles(), allowed_models=allowed).allowed_models)
+    config = AppConfig(profiles=_profiles(), allowed_models=allowed)
+    assert len(config.allowed_models) == 196
+    selectable = {profile.model for profile in config.profiles.values()} | set(
+        config.allowed_models
+    )
+    assert len(selectable) == 200
 
 
 def test_list_shaped_yaml_root_is_rejected_with_path(tmp_path: Path) -> None:
