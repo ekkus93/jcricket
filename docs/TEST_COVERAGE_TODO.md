@@ -32,17 +32,22 @@
 
 ## Phase B — Ollama adapter error paths (P0)
 
-- [ ] **TCT-010** Chat response limits and failures (TC-10).
+- [x] **TCT-010** Chat response limits and failures (TC-10).
   - Test: an answer over `limits.response_bytes` raises exactly `ollama_bad_response: Ollama returned malformed data`; an answer exactly at the limit is accepted.
   - Test: HTTP 500 raises exactly `ollama_unavailable: Ollama is unavailable or rejected the request`; a non-JSON 200 body raises `ollama_bad_response: …`.
-- [ ] **TCT-011** Ollama unavailable on the ask path (TC-11).
+  - Evidence: `tests/unit/test_ollama_errors.py` — `test_chat_rejects_answer_over_response_byte_limit` (11 bytes over a 10-byte limit → exact `ollama_bad_response` text), `test_chat_accepts_answer_exactly_at_response_byte_limit` (5 × `é` = 10 bytes accepted), `test_chat_http_error_and_malformed_body` (500 → exact `ollama_unavailable`; non-JSON → exact `ollama_bad_response`). No defects found.
+- [x] **TCT-011** Ollama unavailable on the ask path (TC-11).
   - Test: through `SecondBrainService.ask`, a refused `/api/tags` gives exactly the `ollama_unavailable` text and writes no conversation row; a timeout gives `ollama_timeout: Ollama request timed out`; `{"models": "nope"}` and a non-JSON body give `ollama_bad_response: …`.
   - Test: with `inventory_cache_seconds: 0`, two asks make two `/api/tags` requests.
-- [ ] **TCT-012** `/api/show` failures (TC-12).
+  - Evidence: `test_ask_reports_installed_tag_lookup_failures` (refused, timeout, `{"models": "nope"}`, non-JSON; each exact text and `store.list() == []`; the handler fails the test if anything other than `/api/tags` is called) and `test_disabled_inventory_cache_fetches_tags_for_every_ask` (2 asks → 2 tag requests). No defects found.
+- [x] **TCT-012** `/api/show` failures (TC-12).
   - Test: HTTP 500 → `ollama_unavailable`; timeout → `ollama_timeout`; list body and non-JSON body → `ollama_bad_response`; a non-string `parameters` and a non-integer `context_length` are treated as absent.
   - Test: `verify_context_windows` keeps checking later tags after a not-installed tag (both errors reported, in order).
-- [ ] **TCT-013** Inventory parsing edge cases (TC-13).
+  - Evidence: `test_show_failures_are_sanitized` (500, timeout, list body, non-JSON), `test_show_treats_malformed_fields_as_absent` (dict `parameters`, string `context_length` → `(None, None)`), `test_context_window_check_continues_after_missing_tag` (4k and 128k missing → both errors in order, later tags still checked).
+  - Note: spec §10 described branch `ollama.py:350→322` as "continuing after a not-installed tag"; it is actually the duplicate-warning branch. `test_context_window_warning_is_reported_once_per_tag` (an allowed model sharing the unpinned `4k` tag) covers it. `ollama.py` is now 100% line and branch.
+- [x] **TCT-013** Inventory parsing edge cases (TC-13).
   - Test: `/api/ps` entries that are not objects or have a blank name are ignored (`loaded: false`); a tag listed twice in `/api/tags` appears once; a list-shaped `/api/tags` or `/api/ps` body gives `ollama_bad_response`.
+  - Evidence: `test_inventory_ignores_bad_ps_entries_and_duplicate_tags` and `test_inventory_rejects_list_shaped_bodies` (both endpoints). Full suite 221 passed, 1 skipped.
 
 ## Phase C — Service continuation and validation (P0)
 
