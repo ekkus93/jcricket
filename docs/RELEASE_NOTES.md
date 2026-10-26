@@ -29,6 +29,6 @@
 ## Verification summary
 
 - `uv sync --locked`, Ruff lint and format checks, the mocked pytest suite, and `scripts/check_todo_integrity.py` pass. Final results for the release commit are recorded in `docs/REMEDIATION_2_TODO.md` (RM2-040).
-- The opt-in live test and MCP Inspector checks passed on 2026-10-26 against round-1 code; RM2-040 records whether they were repeated on the final round-2 code.
+- On 2026-10-26, against code commit `04bf04a`: mocked suite 193 passed and 1 skipped (the opt-in live test); the opt-in live test passed (real Ollama, conversation, process restart, cross-principal denial, exact error text); and MCP Inspector CLI confirmed both tools, the `mode` enum, and the exact `invalid_input: question must not be empty` error.
 - `4k`, `128k`, and `256k` were re-measured live on 2026-10-26: 2,274 ms (100% GPU), 3,521 ms (100% GPU), and 4,177 ms (7%/93% CPU/GPU) respectively.
 - ChatGPT remote integration and a live systemd lifecycle remain unverified external blockers.

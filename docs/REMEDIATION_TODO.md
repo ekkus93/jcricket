@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation TODO
 
-**Status:** In progress — Gate R1's "failed before the fix" clause is met for 3 of 12 bugs only (see the note under Gate R1). RM-052 and RM-053 rely on live runs recorded on 2026-10-26 that have not been repeated on later code.
+**Status:** In progress — Gate R1's "failed before the fix" clause is met for 3 of 12 bugs only (see the note under Gate R1). The RM-052 live suite and an RM-053-style Inspector check were repeated on round-2 code `04bf04a` (see `docs/REMEDIATION_2_TODO.md` RM2-040).
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_SPEC.md](REMEDIATION_SPEC.md) (requirements `R-xx`), [SPEC.md](SPEC.md)  
 **Related:** [TODO.md](TODO.md) (original v0.1 items `SB-xxx`)

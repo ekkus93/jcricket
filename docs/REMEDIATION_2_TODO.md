@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation Round 2 TODO
 
-**Status:** Not started  
+**Status:** All RM2 tasks checked with evidence (2026-10-26). Remaining exceptions outside this file: SB-052 and SB-053 need live Codex and Claude Code re-runs on current code including a restart of the workstation server; Gate R1 fail-first evidence covers 3 of 12 round-1 bugs; the R-35 owner-decision note (RM2-031) awaits owner confirmation; SB-062 and the ChatGPT items stay blocked.  
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_2_SPEC.md](REMEDIATION_2_SPEC.md) (requirements `R2-xx`)  
 **Related:** [TODO.md](TODO.md) (`SB-xxx`), [REMEDIATION_TODO.md](REMEDIATION_TODO.md) (`RM-xxx`)
@@ -154,8 +154,9 @@
 
 ## Phase E — Final verification (P0)
 
-- [ ] **RM2-040** Run the full R2-50 check on the final commit, including a fresh clone, the integrity checker, the opt-in live suite, and the manual Inspector error-text check; record each result with its commit hash (R2-50).
+- [x] **RM2-040** Run the full R2-50 check on the final commit, including a fresh clone, the integrity checker, the opt-in live suite, and the manual Inspector error-text check; record each result with its commit hash (R2-50).
   - Acceptance: every R2-50 item is recorded with its date, command, and result in the verification record below; the opt-in live and Inspector rows say "Passed" only if they were run on the final commit.
+  - Evidence: all R2-50 checks ran on 2026-10-26 against tested code commit `04bf04a` (later commits change only documentation); results are in the verification record below.
 
 **Gate E:** All tasks above are checked with evidence, the integrity checker passes, and the Status lines of all three TODO files are accurate.
 
@@ -190,13 +191,13 @@ Populate as work proceeds. Do **not** predeclare success.
 
 | Verification | Result | Evidence (commit/command/output) |
 |---|---|---|
-| Integrity checker before restoration (RM2-002) | Not run | — |
-| Integrity checker after restoration (Gate A) | Not run | — |
-| Round-1 fail-first evidence at `ca3a444` (RM2-005) | Not run | — |
-| Round-2 fail-first evidence at `ad85cdb` (Phase B) | Not run | — |
-| Exact error text through MCP (RM2-010) | Not run | — |
-| Access-log leakage test (RM2-023) | Not run | — |
-| Phase checks (sync, Ruff, pytest) | Not run | — |
-| Fresh clone of final commit (RM2-040) | Not run | — |
-| Opt-in live suite on final commit (RM2-040) | Not run | — |
-| Inspector error-text check on final commit (RM2-040) | Not run | — |
+| Integrity checker before restoration (RM2-002) | Failed as expected | 2026-10-26, `9474065`: `uv run python scripts/check_todo_integrity.py` exit 1, 17 violations (SB-001, SB-028, SB-035, SB-050–SB-058, SB-061, SB-062; RM-019, RM-051, RM-052). |
+| Integrity checker after restoration (Gate A) | Passed | 2026-10-26, `a08b76d` onward: "TODO integrity check passed" before every later commit. |
+| Round-1 fail-first evidence at `ca3a444` (RM2-005) | Partial | 2026-10-26, `4ee4307`: bugs 3, 7, 12 failed at `ca3a444`; 9 tests not runnable there (missing `errors` module / `ModelSelection`). Recorded under Gate R1. |
+| Round-2 fail-first evidence at `ad85cdb` (Phase B) | Passed | 2026-10-26: every Phase B test failed on unfixed code (same source as `ad85cdb`) for the expected reason before its fix; details under RM2-010 and RM2-012 to RM2-018. |
+| Exact error text through MCP (RM2-010) | Passed | 2026-10-26, `0b5f9e1`: `tests/integration/test_error_contract.py`, 7 exact-equality cases. |
+| Access-log leakage test (RM2-023) | Passed | 2026-10-26, `83bf7ce`: `tests/integration/test_access_log_leakage.py`, real uvicorn subprocess, ~0.5 s. |
+| Phase checks (sync, Ruff, pytest) | Passed | 2026-10-26, `04bf04a`: `uv sync --locked`; `uv run ruff check .` all passed; `uv run ruff format --check .` 44 files formatted; `uv run pytest -q` 193 passed, 1 skipped (live, opt-in), 1 Starlette/httpx deprecation warning. Baseline before round 2 was 137 passed, 1 skipped. |
+| Fresh clone of final commit (RM2-040) | Passed | 2026-10-26: `git clone` of `04bf04a` into an empty scratch directory; locked sync, Ruff check and format, pytest (193 passed, 1 skipped), and the integrity checker all passed. |
+| Opt-in live suite on final commit (RM2-040) | Passed | 2026-10-26, `04bf04a`: `SECOND_BRAIN_LIVE=1 SECOND_BRAIN_CONFIG=config.yaml uv run pytest -m live -q` with tokens loaded from the private credentials file: 1 passed (real Ollama, two-turn conversation, process restart, cross-principal denial, exact error text). Used its own port and temporary database. |
+| Inspector error-text check on final commit (RM2-040) | Passed | 2026-10-26, `04bf04a`: `npx --no-install @modelcontextprotocol/inspector --cli … --transport http` against a temporary server on current code: `tools/list` returned `ask_second_brain`, `list_models` and the five-value `mode` enum; `ask_second_brain` with a whitespace question returned `isError: true` and text exactly `invalid_input: question must not be empty` (Inspector exits non-zero for `isError`, as expected). |
