@@ -1,5 +1,7 @@
 # Local client setup
 
+> To have Codex register this server with Claude Code in one go, give it [`docs/AGENT_SETUP.md`](../AGENT_SETUP.md). It checks that the server is running first, then registers the `second-brain` entry for Claude Code and verifies the connection.
+
 The local server exposes Streamable HTTP at `http://127.0.0.1:18765/mcp` and uses independent tokens for `codex` and `claude-code`. Create the user credential file once with `uv run python scripts/init_credentials.py`; it writes `~/.config/second-brain/credentials.env` with mode `0600`. It refuses to overwrite an existing file. Start the server with `scripts/run_local.sh`. The helper reads the user credential file and emits only the requested bearer header as JSON; it never prints tokens to stderr or a log. For systemd, `/etc/second-brain/credentials.env` is a separate service credential file, read by systemd and normally owned by `root:second-brain` with mode `0640`. The helper does not read the service file.
 
 ## Codex
