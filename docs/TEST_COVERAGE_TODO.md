@@ -68,12 +68,17 @@
 
 ## Phase D — Credential and config validation (P0)
 
-- [ ] **TCT-030** Credentials (TC-30).
+- [x] **TCT-030** Credentials (TC-30).
   - Test: missing `claude-code` mapping, a 31-character token, and two identical tokens each fail with the exact TC-30 message; valid distinct tokens return the principal-to-token map.
-- [ ] **TCT-031** Ollama URL forms (TC-31).
+  - Evidence: `tests/unit/test_config_validation.py` — `test_credentials_require_both_local_principals`, `test_credentials_reject_weak_or_shared_tokens` (exact messages), `test_credentials_return_principal_token_map`. No defect found.
+- [x] **TCT-031** Ollama URL forms (TC-31).
   - Test: `ftp://127.0.0.1` and `http://` fail with the scheme/host message; `http://localhost:11434`, `http://127.0.0.1:11434/` (trailing slash stripped), and `http://[::1]:11434` load; `http://example.com` and `http://10.0.0.5:11434` fail with the loopback message.
-- [ ] **TCT-032** Remaining field validation (TC-32).
+  - Evidence: `test_rejects_invalid_ollama_urls` (4 cases) and `test_accepts_loopback_ollama_urls` (3 cases, including the trailing-slash strip). No defect found.
+- [x] **TCT-032** Remaining field validation (TC-32).
   - Test: each row of the TC-32 table fails with its exact message, including the 201-selectable-tags case and the list-shaped YAML root through `load_config`.
+  - Evidence: `test_field_validation_messages` (6 table rows; 4 profiles + 197 allowed = 201 tags), `test_two_hundred_selectable_tags_are_allowed` (boundary), `test_list_shaped_yaml_root_is_rejected_with_path`.
+  - Evidence (defect found, TC-03): `test_list_shaped_yaml_root_is_rejected_with_path` failed first. A list-shaped root raised a bare `configuration root must be a mapping` without the `invalid configuration in <path>:` prefix every other config error has, because that `ValueError` was raised inside a `try` that only re-wrapped `OSError`/`YAMLError`/`ValidationError`. `load_config` now wraps all three cases with the path.
+  - Evidence: `test_missing_or_malformed_yaml_names_the_file` covers the missing-file and invalid-YAML branch that coverage then showed as untested. `config.py` is 100% line and branch; full suite 248 passed, 1 skipped.
 
 ## Phase E — Store, HTTP, CLI, and helper scripts (P1)
 
@@ -125,6 +130,6 @@ Populate as work proceeds. Do **not** predeclare success.
 |---|---|---|
 | Baseline with subprocess coverage (TCT-001) | Recorded | 2026-10-26, on `c4eb4f1` + TCT-001 config: auth.py 96%, budget 100%, cli 81%, config 90%, errors 100%, ollama 90%, prompts 75%, schemas 100%, server 97%, service 95%, store 96%, `deploy/auth_headers.py` 85%, `scripts/check_todo_integrity.py` 92%, `scripts/init_credentials.py` 84%; total 91% (1300 statements, 88 missed, 388 branches, 56 partial). 202 passed, 1 skipped. |
 | Phase checks (sync, Ruff, pytest, coverage) | Not run | — |
-| Fail-first evidence for exposed defects (TC-03, TCT-063) | Not run | — |
+| Fail-first evidence for exposed defects (TC-03, TCT-063) | In progress | TCT-032: `load_config` list-root message lacked the file path; test failed first, then fixed. |
 | Final coverage table and `fail_under` (TCT-070) | Not run | — |
 | Final verification (TCT-071) | Not run | — |

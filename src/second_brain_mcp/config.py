@@ -287,8 +287,13 @@ def load_config(path: Path) -> AppConfig:
     try:
         with path.expanduser().open(encoding="utf-8") as config_file:
             raw: Any = yaml.safe_load(config_file)
-        if not isinstance(raw, dict):
-            raise ValueError("configuration root must be a mapping")
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(f"invalid configuration in {path}: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"invalid configuration in {path}: configuration root must be a mapping"
+        )
+    try:
         return AppConfig.model_validate(raw)
-    except (OSError, yaml.YAMLError, ValidationError) as exc:
+    except ValidationError as exc:
         raise ValueError(f"invalid configuration in {path}: {exc}") from exc
