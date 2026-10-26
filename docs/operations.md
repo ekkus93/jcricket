@@ -23,7 +23,27 @@ The default selectable profiles use these approximate usable input sizes (before
 | `128k` | 131,072 | 2,048 | 128,468 bytes |
 | `256k` | 262,144 | 2,048 | 259,540 bytes |
 
-Estimates reserve space for the longest system prompt and chat framing; model tokenization can use more. `list_models` returns at most 200 entries and reports `truncated`; configured models remain included. Tool errors use stable codes such as `invalid_input`, `model_not_approved`, `model_not_installed`, `context_too_large`, `busy`, `ollama_unavailable`, `ollama_timeout`, `ollama_bad_response`, and `internal_error`. Each HTTP response carries a server-generated `X-Request-ID` for support correlation.
+Estimates reserve space for the longest system prompt and chat framing; model tokenization can use more. `list_models` returns at most 200 entries and reports `truncated`; configured models remain included. Each HTTP response carries a server-generated `X-Request-ID` for support correlation.
+
+### Tool errors
+
+A failed tool call returns `isError: true` with one text item that is exactly `<code>: <message>`, for example `invalid_input: question must not be empty`. Messages are fixed and never contain prompts, tokens, stack traces, or database rows.
+
+| Code | When it occurs |
+|---|---|
+| `invalid_input` | Empty or over-long question or context, empty selector, both `model` and `model_profile`, an argument outside its schema (`invalid value for <field>`), or an unknown tool. |
+| `conversation_unavailable` | Unknown conversation ID, an ID owned by another principal (indistinguishable from unknown), or a conversation deleted while its turn was running. |
+| `model_not_approved` | Unknown profile, a model not in `allowed_models`, or a conversation whose stored selection is no longer approved. |
+| `model_not_installed` | The selected tag is not in Ollama's `/api/tags`; the message names the profile and tag. |
+| `context_too_large` | The current question and context exceed the selection's prompt budget; the message gives the available bytes and suggests a larger profile when one fits. |
+| `busy` | `concurrency + queue_depth` requests are already admitted. |
+| `ollama_unavailable` | Ollama refused the connection or returned a non-success status. |
+| `ollama_timeout` | An Ollama request exceeded its configured timeout. |
+| `ollama_bad_response` | Ollama returned malformed, empty, or oversized data. |
+| `unauthorized` | A tool ran without an authenticated principal; the HTTP middleware normally rejects such requests first. |
+| `internal_error` | Any other failure; only the exception type is logged. |
+
+Caller mistakes (`invalid_input`, `conversation_unavailable`, `model_not_approved`, `context_too_large`) are logged at INFO, backend and capacity problems at WARNING, and `unauthorized` / `internal_error` at ERROR.
 
 ## Backup, restore, and removal
 

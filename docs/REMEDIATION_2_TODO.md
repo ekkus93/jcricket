@@ -139,8 +139,10 @@
 
 ## Phase D — Documentation and reconciliation (P1)
 
-- [ ] **RM2-030** Update `SPEC.md` §4.1, `docs/operations.md`, `README.md`, and `docs/RELEASE_NOTES.md` to describe the exact error format and list all eleven codes with one line each (R2-11).
+- [x] **RM2-030** Update `SPEC.md` §4.1, `docs/operations.md`, `README.md`, and `docs/RELEASE_NOTES.md` to describe the exact error format and list all eleven codes with one line each (R2-11).
   - Acceptance: `docs/operations.md` lists `conversation_unavailable` and `unauthorized`; no document mentions an `Error executing tool` prefix or describes errors differently from the delivered text.
+  - Evidence: `SPEC.md` §4.1 states the exact `isError` / `<code>: <message>` format, the `invalid value for <field>` rule, and `invalid_input: unknown tool`; `docs/operations.md` gains a "Tool errors" table with all eleven codes (one line each) and the log-level policy; `README.md` and `docs/RELEASE_NOTES.md` describe the exact format. `grep -rn "Error executing"` over `SPEC.md`, `operations.md`, `README.md`, `RELEASE_NOTES.md`, and `docs/integrations/` finds nothing.
+  - Note: the remediation spec and TODO files still mention the old prefix, but only when describing the bug and its history, not the delivered behavior.
 - [ ] **RM2-031** Amend `REMEDIATION_SPEC.md` R-35 for tag sharing (R2-15), recorded as an `Owner decision (YYYY-MM-DD)` note, and document helper usage for other principals and the new rotation behavior in `docs/operations.md` and `docs/integrations/local-clients.md` (R2-18, R2-19).
 - [ ] **RM2-032** Re-evaluate SB-025, SB-033, SB-066 in `docs/TODO.md` and RM-025, RM-026, RM-047, RM-048, RM-061, RM-063 in `docs/REMEDIATION_TODO.md` against their unchanged text and the new evidence, adding `Evidence:` sub-bullets.
   - Acceptance: the integrity checker reports zero violations; every checked item has evidence that covers each clause.

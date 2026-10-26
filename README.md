@@ -28,7 +28,7 @@ Create separate local client tokens in a private file with `uv run python script
 
 The MCP service exposes exactly two tools: `ask_second_brain` and read-only `list_models`. A first request can use arguments such as `{"question":"Review this approach independently.","context":"Selected design notes...","mode":"critic","model_profile":"32k"}`. Save the returned `conversation_id` and pass it with the next question to continue that principal's conversation. Local access binds to loopback. Remote access requires a separately secured HTTPS proxy or supported private tunnel and verified authentication. Do not expose Ollama's HTTP API publicly.
 
-Tool failures use stable codes including `invalid_input`, `conversation_unavailable`, `model_not_approved`, `model_not_installed`, `context_too_large`, `busy`, `ollama_unavailable`, `ollama_timeout`, `ollama_bad_response`, `unauthorized`, and `internal_error`; see [operations](docs/operations.md) for details and input-size guidance.
+A failed tool call returns `isError: true` with text that is exactly `<code>: <message>`, for example `invalid_input: question must not be empty`. Codes are `invalid_input`, `conversation_unavailable`, `model_not_approved`, `model_not_installed`, `context_too_large`, `busy`, `ollama_unavailable`, `ollama_timeout`, `ollama_bad_response`, `unauthorized`, and `internal_error`; see [operations](docs/operations.md) for details and input-size guidance.
 
 ## Connect an MCP client
 

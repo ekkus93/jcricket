@@ -5,7 +5,7 @@
 - Local Streamable HTTP MCP server with two tools: `ask_second_brain` and read-only `list_models`.
 - Independent Codex and Claude Code principals, private bearer credentials, and isolated SQLite conversations that survive restarts.
 - Ollama-backed modes, four configured context profiles, approved direct model selection, continuation, and bounded history.
-- Transactional turn persistence, validated model selection, sanitized error categories, request IDs, rate/concurrency limits, and administrative list/show/delete/purge/export commands.
+- Transactional turn persistence, validated model selection, tool errors returned as exactly `<code>: <message>` with eleven fixed codes, request IDs, rate/concurrency limits, and administrative list/show/delete/purge/export commands.
 - `uv`-locked development environment, mocked regression suite, opt-in live Ollama checks, and an Inspector CLI verification path.
 
 ## Known limitations
