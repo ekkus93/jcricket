@@ -10,6 +10,7 @@
 - Implement in the phase order below. Within a phase, tasks may run in any order unless a dependency is listed.
 - **Never reword a task when checking it off.** Put evidence, caveats, and partial progress in an indented note under the task or in the verification record. Changing a task's scope requires an explicit owner decision recorded here with a date.
 - Check a task only when **every** clause and acceptance check is implemented **and** verified. Partial work stays unchecked with a note.
+- The item line and its `Test:` / `Acceptance:` sub-bullets are requirement text; never edit or remove them when checking an item. Add evidence, caveats, and limitations as new `Evidence:` or `Note:` sub-bullets. If an acceptance check cannot be met as written, leave the item unchecked with a `Note:` until it is met or the owner records `Owner decision (YYYY-MM-DD): …` under the item.
 - Each task lists its acceptance checks. "Test:" means an automated mocked test that runs under plain `uv run pytest`, with no Ollama, GPU, network, or accounts.
 - After each phase, run `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest`, and record the results.
 - Keep the security invariants in REMEDIATION_SPEC §1.2 intact in every change.

@@ -16,6 +16,7 @@
 - TODO entries state requirements, not outcomes. Never reword requirement text when updating a checkbox; put evidence and caveats in notes or the verification record.
 - Narrowing or dropping a requirement requires an explicit owner decision recorded here with a date and, when it changes `SPEC.md`, a corresponding specification update.
 - Check an item only when every clause of its original requirement is implemented and verified; partial completion stays unchecked.
+- The item line and its `Test:` / `Acceptance:` sub-bullets are requirement text; never edit or remove them when checking an item. Add evidence, caveats, and limitations as new `Evidence:` or `Note:` sub-bullets. If an acceptance check cannot be met as written, leave the item unchecked with a `Note:` until it is met or the owner records `Owner decision (YYYY-MM-DD): …` under the item.
 - Stop the first release at an independently useful, secure tool-free chatbot; memory sharing and advanced agent features remain deferred.
 
 ## Phase 0 — Repository and baseline (P0)

@@ -19,8 +19,9 @@
 
 ## Phase A — Process integrity (P0, do first)
 
-- [ ] **RM2-001** Add the R2-01 working rule (acceptance sub-bullets are requirement text; unmet checks stay unchecked) to `docs/TODO.md` and `docs/REMEDIATION_TODO.md` (R2-01).
+- [x] **RM2-001** Add the R2-01 working rule (acceptance sub-bullets are requirement text; unmet checks stay unchecked) to `docs/TODO.md` and `docs/REMEDIATION_TODO.md` (R2-01).
   - Acceptance: both files' working rules contain the rule; no existing item text changes in this commit.
+  - Evidence: one working-rule bullet inserted in each file; `git diff --stat` shows exactly one added line per file and no other changes.
 - [ ] **RM2-002** Add `scripts/check_todo_integrity.py` with the five checks, baseline pairs, and exit codes from R2-02 (R2-02).
   - Test: temporary-git-repo tests cover a removed item, changed item text, removed `Test:` sub-bullet, changed `Acceptance:` sub-bullet, changed gate line, an allowed `Owner decision (YYYY-MM-DD):` change, and a clean file (exit 0).
   - Acceptance: run against the current repository *before* RM2-003 and RM2-004, it reports violations for SB-001, SB-028, SB-035, SB-050–SB-058, SB-061, SB-062, RM-019, RM-051, and RM-052. Record the output as evidence.
