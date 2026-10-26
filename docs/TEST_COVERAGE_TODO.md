@@ -108,7 +108,9 @@
   - Evidence required: the create-over-existing test fails before the fix (currently a `FileExistsError` traceback, reproduced 2026-10-26).
   - Evidence (fail first): `test_create_refuses_existing_file_without_traceback` failed on the unfixed script with `Traceback … FileExistsError` in stderr.
   - Evidence (after fix): the create path catches `FileExistsError`, prints `credentials file already exists: <path>; use --rotate to replace its tokens`, and exits 1; the file is unchanged. `test_rotate_without_existing_file_fails_cleanly` passed without a fix. Full suite 276 passed, 1 skipped (plain run 7.2 s).
-- [ ] **TCT-064** Re-run coverage after TCT-063 and add tests for any `scripts/init_credentials.py` staging or restore lines still uncovered (`:106`, `:113-116`, `:128` at `588dbfb`), or record a `Note:` explaining why a line cannot be reached (TC-01, §10).
+- [x] **TCT-064** Re-run coverage after TCT-063 and add tests for any `scripts/init_credentials.py` staging or restore lines still uncovered (`:106`, `:113-116`, `:128` at `588dbfb`), or record a `Note:` explaining why a line cannot be reached (TC-01, §10).
+  - Evidence: after TCT-063, coverage showed four `init_credentials.py` gaps, now tested in `tests/integration/test_credential_rotation.py`: `test_create_writes_private_file_with_distinct_tokens` (the normal create path had no test: 0600 file, 0700 directory, two distinct 64-hex tokens, exact output), `test_rotate_user_file_only` (rotation without `--service-file`; the service file is untouched), `test_rotation_as_root_preserves_file_owner` (patched `geteuid`/`fchown`), and `test_staging_failure_removes_temporary_files` (an `fsync` failure leaves only the original file). `init_credentials.py` is now 99%.
+  - Note: the remaining partial branch `init_credentials.py:122->124` is the cleanup path when the temporary file no longer exists; `mkstemp` always creates it, so it cannot be reached without patching `os.path.exists` itself.
 
 ## Phase F — Gate and final verification (P0)
 

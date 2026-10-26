@@ -164,3 +164,73 @@ def test_create_refuses_existing_file_without_traceback(tmp_path: Path) -> None:
         "use --rotate to replace its tokens"
     )
     assert user_file.read_text(encoding="utf-8") == original
+
+
+def _module():
+    spec = importlib.util.spec_from_file_location("init_credentials", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_create_writes_private_file_with_distinct_tokens(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    result = _init(home)
+    path = home / ".config/second-brain/credentials.env"
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        f"Created private credentials file: {path}",
+        "File mode: 0600",
+    ]
+    values = _values(path)
+    assert set(values) == {"CODEX_MCP_TOKEN", "CLAUDE_CODE_MCP_TOKEN"}
+    assert all(len(token) == 64 for token in values.values())
+    assert values["CODEX_MCP_TOKEN"] != values["CLAUDE_CODE_MCP_TOKEN"]
+    assert _mode(path) == 0o600
+    assert _mode(path.parent) == 0o700
+
+
+def test_rotate_user_file_only(tmp_path: Path) -> None:
+    home, user_file, service_file = _setup(tmp_path)
+    service_before = service_file.read_text(encoding="utf-8")
+    result = _init(home, "--rotate")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        f"Rotated private credentials file: {user_file}",
+        "Restart the service, then reconnect each MCP client.",
+        "File mode: 0600",
+    ]
+    assert _values(user_file)["CODEX_MCP_TOKEN"] != "a" * 64
+    assert service_file.read_text(encoding="utf-8") == service_before
+
+
+def test_rotation_as_root_preserves_file_owner(tmp_path: Path, monkeypatch) -> None:
+    module = _module()
+    _home, user_file, _service_file = _setup(tmp_path)
+    owner = user_file.stat()
+    chowned: list[tuple[int, int]] = []
+    monkeypatch.setattr(module.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(
+        module.os, "fchown", lambda _fd, uid, gid: chowned.append((uid, gid))
+    )
+    module.rotate([user_file], {"CODEX_MCP_TOKEN": "n" * 64})
+    assert chowned == [(owner.st_uid, owner.st_gid)]
+    assert _values(user_file)["CODEX_MCP_TOKEN"] == "n" * 64
+
+
+def test_staging_failure_removes_temporary_files(tmp_path: Path, monkeypatch) -> None:
+    module = _module()
+    _home, user_file, _service_file = _setup(tmp_path)
+    original = user_file.read_text(encoding="utf-8")
+
+    def failing_fsync(_fd):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(module.os, "fsync", failing_fsync)
+    with pytest.raises(module.RotationError, match="cannot stage"):
+        module.rotate([user_file], {"CODEX_MCP_TOKEN": "n" * 64})
+    assert user_file.read_text(encoding="utf-8") == original
+    assert sorted(path.name for path in user_file.parent.iterdir()) == [
+        "credentials.env"
+    ]
