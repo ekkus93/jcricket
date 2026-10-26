@@ -137,14 +137,13 @@ def create_app(config: AppConfig) -> Starlette:
             logger.debug("unexpected ask_second_brain failure", exc_info=True)
             logger.error(
                 "request_id=%s rpc_id=%s tool=ask_second_brain principal=%s "
-                "status=error category=internal_error error_type=%s mode=%s "
-                "profile=%s model=%s context_limit_tokens=%s history_trimmed=%s "
+                "status=error category=internal_error mode=%s profile=%s model=%s "
+                "context_limit_tokens=%s history_trimmed=%s "
                 "elapsed_ms=%s prompt_tokens=%s completion_tokens=%s "
                 "conversation_id_hash=%s",
                 request_id,
                 rpc_id,
                 principal,
-                type(exc).__name__,
                 mode,
                 model_profile or "-",
                 model or "-",
@@ -154,6 +153,11 @@ def create_app(config: AppConfig) -> Starlette:
                 "-",
                 "-",
                 conversation_hash,
+            )
+            logger.error(
+                "request_id=%s unexpected_error_type=%s",
+                request_id,
+                type(exc).__name__,
             )
             raise SecondBrainError("internal_error") from exc
         usage = result["usage"]
@@ -216,26 +220,29 @@ def create_app(config: AppConfig) -> Starlette:
             logger.debug("unexpected list_models failure", exc_info=True)
             logger.error(
                 "request_id=%s rpc_id=%s tool=list_models principal=%s "
-                "status=error category=internal_error error_type=%s mode=- profile=- "
+                "status=error category=internal_error mode=- profile=- "
                 "model=- context_limit_tokens=- history_trimmed=- elapsed_ms=%s "
                 "prompt_tokens=- completion_tokens=- conversation_id_hash=-",
                 request_id,
                 rpc_id,
                 principal,
-                type(exc).__name__,
                 round((monotonic() - started) * 1000),
+            )
+            logger.error(
+                "request_id=%s unexpected_error_type=%s",
+                request_id,
+                type(exc).__name__,
             )
             raise SecondBrainError("internal_error") from exc
         logger.info(
             "request_id=%s rpc_id=%s tool=list_models principal=%s status=ok "
             "category=- mode=- profile=- model=- context_limit_tokens=- "
             "history_trimmed=- elapsed_ms=%d prompt_tokens=- completion_tokens=- "
-            "conversation_id_hash=- model_count=%d",
+            "conversation_id_hash=-",
             request_id,
             rpc_id,
             principal,
             round((monotonic() - started) * 1000),
-            len(inventory["models"]),
         )
         return ModelInventory.model_validate(inventory)
 

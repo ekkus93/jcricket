@@ -114,6 +114,67 @@ def test_export_creates_private_file_and_refuses_overwrite(tmp_path: Path) -> No
         )
 
 
+def test_list_filter_show_unknown_and_delete_paths(tmp_path: Path, capsys) -> None:
+    config = _config(tmp_path / "db.sqlite3")
+    store = ConversationStore(config.database_path)
+    selected = ModelSelection("32k", "tag:32k", 32768)
+    codex_id = "codex-conversation"
+    claude_id = "claude-conversation"
+    for principal, identifier in (("codex", codex_id), ("claude-code", claude_id)):
+        store.record_turn(
+            principal,
+            identifier,
+            selected,
+            "question",
+            None,
+            "answer",
+            "discuss",
+            new_conversation=True,
+        )
+
+    _conversations(config, Namespace(action="list", principal="codex"))
+    listed = json.loads(capsys.readouterr().out)
+    assert [item["id"] for item in listed] == [codex_id]
+    _conversations(config, Namespace(action="show", conversation_id=codex_id))
+    shown = json.loads(capsys.readouterr().out)
+    assert shown["conversation"]["principal"] == "codex"
+    assert len(shown["turns"]) == 2
+    with pytest.raises(SystemExit, match="conversation not found"):
+        _conversations(config, Namespace(action="show", conversation_id="missing"))
+    with pytest.raises(SystemExit, match="Cancelled"):
+        _conversations(
+            config,
+            Namespace(action="delete", conversation_id=codex_id, yes=False),
+        )
+    _conversations(
+        config,
+        Namespace(action="delete", conversation_id=codex_id, yes=True),
+    )
+    assert store.get_any(codex_id) is None
+    assert store.get_any(claude_id) is not None
+
+
+def test_eof_at_delete_confirmation_is_cancelled(tmp_path: Path, monkeypatch) -> None:
+    config = _config(tmp_path / "db.sqlite3")
+    store = ConversationStore(config.database_path)
+    conversation = store.create("codex", "32k", "tag", 32768)
+
+    class InteractiveInput:
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr("second_brain_mcp.cli.sys.stdin", InteractiveInput())
+    monkeypatch.setattr(
+        "builtins.input", lambda _prompt: (_ for _ in ()).throw(EOFError())
+    )
+    with pytest.raises(SystemExit, match="Cancelled"):
+        _conversations(
+            config,
+            Namespace(action="delete", conversation_id=conversation.id, yes=False),
+        )
+    assert store.get_any(conversation.id) is not None
+
+
 def test_delete_requires_an_existing_id(tmp_path: Path) -> None:
     args = Namespace(
         action="delete",

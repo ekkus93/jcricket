@@ -7,6 +7,7 @@ import hmac
 import time
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Callable
 from contextvars import ContextVar
 from urllib.parse import urlsplit
 
@@ -44,6 +45,7 @@ class LocalAuthMiddleware:
         host: str,
         requests_per_minute: int = 60,
         trusted_hosts: list[str] | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self.app = app
         self.credentials = {
@@ -57,6 +59,7 @@ class LocalAuthMiddleware:
             *(trusted_hosts or []),
         }
         self.requests_per_minute = requests_per_minute
+        self._clock = clock or time.monotonic
         self._requests: dict[str, deque[float]] = defaultdict(deque)
         self._rate_lock = asyncio.Lock()
 
@@ -126,7 +129,7 @@ class LocalAuthMiddleware:
         if principal is None:
             await _json(send, 401, b'{"error":"invalid credentials"}')
             return
-        now = time.monotonic()
+        now = self._clock()
         async with self._rate_lock:
             requests = self._requests[principal]
             while requests and now - requests[0] >= 60:

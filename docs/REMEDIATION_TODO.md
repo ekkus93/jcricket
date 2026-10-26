@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation TODO
 
-**Status:** In progress — Phases R0–R3 complete; remediation phases remain
+**Status:** In progress — Phases R0–R4 complete; reconciliation and release remain
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_SPEC.md](REMEDIATION_SPEC.md) (requirements `R-xx`), [SPEC.md](SPEC.md)  
 **Related:** [TODO.md](TODO.md) (original v0.1 items `SB-xxx`)
@@ -135,12 +135,13 @@
 
 ## Phase R4 — Test suite completion (P0)
 
-- [ ] **RM-050** Reorganize tests into `tests/unit/`, `tests/integration/`, `tests/security/`, and `tests/live/`, keeping shared fixtures in `tests/conftest.py` (R-50).
-- [ ] **RM-051** Fill the remaining R-51 mocked cases not already added by earlier tasks: mode-prompt distinctness (1), all profile mappings and default (2), selectors (3), continuation with mode change (5), trimming boundaries (6), same-conversation concurrency ordering and parallel different conversations (7), restart persistence through a fresh store (9), cross-principal indistinguishability (10), 413 body limit and character limits (11), rate-limit window expiry with an injectable clock (12), Host/Origin cases (13), the exact `/api/chat` key set on every path (15), and prompt-injection text passing as data (16).
-  - Acceptance: a checklist mapping each R-51 item to a test name is added as a note under this task.
-- [ ] **RM-052** Add opt-in live tests in `tests/live/` with the `live` marker registered and skipped unless `SECOND_BRAIN_LIVE=1`; cover the R-52 scenarios, including an MCP client session that checks enums and a safe error (R-52).
-  - Acceptance: plain `uv run pytest` reports them as skipped; `SECOND_BRAIN_LIVE=1 uv run pytest -m live` passes on this workstation; record the date, command, and summary in the verification record.
-- [ ] **RM-053** Re-run MCP Inspector after R1 and R2 and confirm the two tools, enum schemas, the `truncated` field, a valid ask response, and a safe error response (R-53).
+- [x] **RM-050** Reorganize tests into `tests/unit/`, `tests/integration/`, `tests/security/`, and `tests/live/`, keeping shared fixtures in `tests/conftest.py` (R-50).
+- [x] **RM-051** Fill the remaining R-51 mocked cases not already added by earlier tasks: mode-prompt distinctness (1), all profile mappings and default (2), selectors (3), continuation with mode change (5), trimming boundaries (6), same-conversation concurrency ordering and parallel different conversations (7), restart persistence through a fresh store (9), cross-principal indistinguishability (10), 413 body limit and character limits (11), rate-limit window expiry with an injectable clock (12), Host/Origin cases (13), the exact `/api/chat` key set on every path (15), and prompt-injection text passing as data (16).
+  - R-51 test mapping: (1) `test_mode_prompts_are_pairwise_distinct`, `test_each_mode_has_distinct_instruction`, `test_mcp_rejects_mode_outside_published_enum`; (2) `test_profiles_select_exact_mapping`, `test_default_selection_is_32k`; (3) `test_approved_direct_model_returns_null_profile`, `test_rejects_conflicting_and_unapproved_models`, `test_rejects_invalid_input_and_unknown_model`; (4) `test_missing_profile_model_error_names_profile_and_tag`; (5) `test_persistence_continuity_and_principal_isolation`, `test_mode_and_direct_model_can_change_on_continuation`, `test_continuation_uses_current_profile_mapping_and_budget`, failure/revocation tests; (6) `test_trimming_keeps_newest_complete_pairs_and_reports_fit_status`, `test_character_limits_and_oversized_rejection_write_nothing`; (7) `test_later_continuation_reads_selection_after_lock`, `test_distinct_conversations_infer_in_parallel`, admission/queue tests; (8) `test_deleted_conversation_during_inference_cannot_be_recreated`; (9) `test_conversation_survives_fresh_service_and_store`; (10) `test_cross_principal_unknown_id_is_indistinguishable`; (11) body-limit and character-limit tests; (12) `test_rate_limit_is_per_principal`, `test_rate_limit_window_expires_with_injected_clock`; (13) `test_host_and_origin_policy_cases`, `test_configured_trusted_host_is_accepted`; (14) CLI tests in `tests/integration/test_cli.py`; (15–16) `test_chat_request_never_contains_tools`, `test_prompt_injection_is_sent_as_untrusted_user_data`.
+- [x] **RM-052** Add opt-in live tests in `tests/live/` with the `live` marker registered and skipped unless `SECOND_BRAIN_LIVE=1`; cover the R-52 scenarios, including an MCP client session that checks enums and a safe error (R-52).
+  - Verified 2026-10-26 with the private workstation config and environment-loaded tokens; `SECOND_BRAIN_LIVE=1 uv run pytest -m live -q`: 1 passed. Plain `uv run pytest -q` skips the test unless opted in.
+- [x] **RM-053** Re-run MCP Inspector after R1 and R2 and confirm the two tools, enum schemas, the `truncated` field, a valid ask response, and a safe error response (R-53).
+  - Verified 2026-10-26 with `@modelcontextprotocol/inspector` CLI against the current checkout on a temporary loopback port: strict `tools/list` returned exactly the two expected tools and enum schemas; `list_models` returned `truncated`; a live `32k` ask returned usage; empty question returned an `isError` safe `invalid_input` response. The Inspector CLI exits nonzero for the expected `isError` result.
 
 **Gate R4:** The mocked suite covers every R-51 case; live checks can be repeated from the repository.
 
@@ -198,11 +199,10 @@ Populate as work proceeds. Do **not** predeclare success.
 |---|---|---|
 | Fresh-clone install, lint, and tests (RM-003) | Passed | Local fresh clone at baseline commit `80ac1102b25128905731505ce167f96050b8b524`; `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 35 passed, one Starlette/httpx deprecation warning. No Ollama/network service was needed. |
 | Phase R0 checks | Passed | After TODO integrity edits: `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest`: 35 passed, one Starlette/httpx deprecation warning. |
-| Phase R1 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 95 passed, one Starlette/httpx deprecation warning. MCP SDK error wrapper behavior is documented under RM-019. |
+| Phase R1 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 95 passed, one Starlette/httpx deprecation warning. MCP SDK error wrapper behavior is documented under RM-019. The regression tests pass after the fixes; they were not run against pre-fix source as expected failures. |
 | Phase R2 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 101 passed, one Starlette/httpx deprecation warning. Tests cover enums, prompt budgets, completion overrides, safe usage warnings, request IDs, response headers, and log leakage. |
 | Phase R3 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 113 passed, one Starlette/httpx deprecation warning; `uv run second-brain --help` shows the structured command tree. Tests cover principal isolation, explicit SDK settings, CLI export/retention, credential rotation, single worker, and trusted hosts. systemd was not available for lifecycle testing. |
-| Phase R2 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 101 passed, one Starlette/httpx deprecation warning. Tests cover enum schemas and MCP rejection, estimator framing, profile/direct completion overrides, actionable size errors, warning counts without content, unique request IDs and error headers, and log leakage. |
-| Full R-51 mocked coverage (RM-051) | Not run | — |
-| Opt-in live suite (RM-052) | Not run | — |
-| MCP Inspector re-check (RM-053) | Not run | — |
+| Phase R4 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 137 passed, 1 live test skipped by default, one Starlette/httpx deprecation warning. Opt-in live test passed; MCP Inspector CLI validation is recorded under RM-053. |
+| Opt-in live suite (RM-052) | Passed | 2026-10-26, `SECOND_BRAIN_LIVE=1 uv run pytest -m live -q`: 1 passed against local Ollama, with temporary server restart and continuation. |
+| MCP Inspector re-check (RM-053) | Passed | 2026-10-26, Inspector CLI: strict tool listing, inventory, live ask, and safe invalid-input response. |
 | Final full check (RM-064) | Not run | — |

@@ -25,6 +25,7 @@ async def test_chat_request_never_contains_tools(app_config: Any) -> None:
             "qwen:32k", [{"role": "user", "content": "hi"}], 32768
         )
     assert result.answer == "answer"
+    assert set(sent[0]) == {"model", "messages", "stream", "think", "options"}
     assert sent[0]["stream"] is False
     assert sent[0]["think"] is False
     assert "tools" not in sent[0]

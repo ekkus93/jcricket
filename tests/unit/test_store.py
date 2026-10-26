@@ -277,3 +277,27 @@ def test_store_closes_every_opened_connection(
     store.delete(first.id)
     store.purge(1)
     assert opened == closed
+
+
+def test_sqlite_write_contention_rolls_back_cleanly(
+    tmp_path: Path, monkeypatch
+) -> None:
+    path = tmp_path / "contention.sqlite3"
+    store = ConversationStore(path)
+    original_connect = store.connect
+
+    def short_timeout_connect():
+        connection = original_connect()
+        connection.execute("PRAGMA busy_timeout = 1")
+        return connection
+
+    monkeypatch.setattr(store, "connect", short_timeout_connect)
+    blocker = sqlite3.connect(path, timeout=0, isolation_level=None)
+    blocker.execute("BEGIN IMMEDIATE")
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            store.create("codex", "32k", "tag", 32768)
+    finally:
+        blocker.rollback()
+        blocker.close()
+    assert store.list() == []

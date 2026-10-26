@@ -438,6 +438,94 @@ def test_configured_trusted_host_is_accepted(tmp_path: Path, monkeypatch) -> Non
     assert rejected.status_code == 403
 
 
+@pytest.mark.parametrize(
+    ("host", "origin", "expected"),
+    [
+        ("foreign.invalid", "http://127.0.0.1", 403),
+        ("127.0.0.1", "https://foreign.invalid", 403),
+        ("127.0.0.1", "null", 403),
+        ("127.0.0.1", "ftp://127.0.0.1", 403),
+        ("[::1]", "http://[::1]", 200),
+    ],
+)
+def test_host_and_origin_policy_cases(
+    tmp_path: Path, monkeypatch, host: str, origin: str, expected: int
+) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    with TestClient(_configured_app(tmp_path)) as client:
+        response = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+            headers={
+                "Authorization": "Bearer " + "c" * 32,
+                "Host": host,
+                "Origin": origin,
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+    assert response.status_code == expected
+
+
+def test_oversized_mcp_body_returns_413_without_tool_call(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    app = _configured_app(tmp_path, Limits(request_bytes=1024))
+
+    async def should_not_call(*args, **kwargs):
+        pytest.fail("request body limit must reject before calling the tool")
+
+    app.state.service.ask = should_not_call
+    with TestClient(app) as client:
+        response = client.post(
+            "/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "ask_second_brain",
+                    "arguments": {"question": "x" * 3000},
+                },
+            },
+            headers={
+                "Authorization": "Bearer " + "c" * 32,
+                "Host": "127.0.0.1",
+                "Origin": "http://127.0.0.1",
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+    assert response.status_code == 413
+
+
+def test_malformed_mcp_json_is_rejected_without_tool_call(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    app = _configured_app(tmp_path)
+
+    async def should_not_call(*args, **kwargs):
+        pytest.fail("malformed JSON must not reach a tool handler")
+
+    app.state.service.ask = should_not_call
+    with TestClient(app) as client:
+        response = client.post(
+            "/mcp",
+            content=b"{",
+            headers={
+                "Authorization": "Bearer " + "c" * 32,
+                "Host": "127.0.0.1",
+                "Origin": "http://127.0.0.1",
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+    assert response.status_code >= 400
+
+
 @pytest.mark.asyncio
 async def test_concurrent_tool_calls_keep_principal_ownership(
     tmp_path: Path, monkeypatch
@@ -639,3 +727,47 @@ async def test_authenticated_scope_exposes_principal_in_user() -> None:
 
     await middleware(scope, receive, send)
     assert captured["user"].username == "codex"
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_window_expires_with_injected_clock() -> None:
+    now = [0.0]
+
+    async def app(_scope, _receive, send):
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    middleware = LocalAuthMiddleware(
+        app,
+        {"codex": "c" * 32},
+        host="127.0.0.1",
+        requests_per_minute=1,
+        clock=lambda: now[0],
+    )
+
+    async def request() -> int:
+        messages = []
+        scope = {
+            "type": "http",
+            "path": "/mcp",
+            "headers": [
+                (b"host", b"127.0.0.1"),
+                (b"authorization", b"Bearer " + b"c" * 32),
+            ],
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            messages.append(message)
+
+        await middleware(scope, receive, send)
+        return next(
+            item["status"] for item in messages if item["type"] == "http.response.start"
+        )
+
+    assert await request() == 204
+    assert await request() == 429
+    now[0] = 61.0
+    assert await request() == 204

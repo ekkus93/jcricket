@@ -31,6 +31,7 @@ packages = ["src/second_brain_mcp"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["live: requires a configured Ollama service and private credentials"]
 
 [tool.ruff]
 line-length = 88
