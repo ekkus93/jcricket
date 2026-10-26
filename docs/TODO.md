@@ -21,7 +21,8 @@
 
 ## Phase 0 — Repository and baseline (P0)
 
-- [x] **SB-001** Repository exists at the remote supplied by the owner.
+- [x] **SB-001** Owner creates a new repository and supplies its URL to the implementer. **[OWNER BLOCKER]**
+  - Evidence: the owner supplied `git@github.com:ekkus93/jcricket.git`, configured as `origin`.
 - [ ] **SB-002** Commit `SPEC.md` and `TODO.md` at repository root and establish project naming/package metadata.
   - The specs and package metadata are committed, but the specification files remain under `docs/`; leaving this requirement unchecked avoids claiming the root-path clause is complete.
 - [x] **SB-003** Create `pyproject.toml`, Python >=3.12 environment, `uv.lock`, runnable module/CLI entry points, `ruff`, `pytest`, and `pytest-asyncio`.
@@ -63,7 +64,9 @@
 - [x] **SB-026** Serialize concurrent modifications of the same conversation, or otherwise guarantee sane chronological ordering and no history corruption.
   - Concurrent profile-switch continuation test verifies user/assistant pair ordering and authoritative selection reads after lock acquisition (RM-014/R-24).
 - [x] **SB-027** Add local administrative CLI to list/show/delete conversations and purge old conversations with bulk-operation confirmation.
-- [x] **SB-028** Test multi-turn continuity, restart persistence, cross-principal denial, unknown IDs, concurrency, retention operations, and long-history trimming. Continuity/restart and cross-principal denial passed live; complete concurrency and retention integration coverage remains.
+- [x] **SB-028** Test multi-turn continuity, server restart, cross-principal denial, unknown IDs, concurrency, retention operations, and long-history trimming.
+  - Evidence: multi-turn continuity `test_persistence_continuity_and_principal_isolation`; server restart `test_conversation_survives_fresh_service_and_store` and live `test_live_ollama_mcp_and_restart_persistence` (process restart); cross-principal denial `test_cross_principal_unknown_id_is_indistinguishable`; unknown IDs `test_rejects_invalid_input_and_unknown_model`, `test_record_turn_rejects_unknown_and_foreign_ids`; concurrency `test_later_continuation_reads_selection_after_lock`, `test_distinct_conversations_infer_in_parallel`, `test_concurrent_tool_calls_keep_principal_ownership`; retention `test_purge_requires_confirmation_and_confirmation_flag`, `test_purge_uses_configured_retention`; long-history trimming `test_trimming_keeps_newest_complete_pairs_and_reports_fit_status`.
+  - Note: the trimming test does not catch non-contiguous history (REMEDIATION_2 bug 3); RM2-012 adds the uneven-size case.
   - Updated evidence: mocked tests now cover concurrency, owner isolation, retention purge, export refusal, and newest-pair trimming; the live suite also exercises continuation after restart (RM-051/RM-052).
 
 **Gate P2:** A conversation resumes after restart; one client cannot read or continue another client's conversation.
@@ -78,7 +81,9 @@
   - Provisioning and separate user/service credential-file instructions are documented. Rotation and old-token rejection passed with private `.bak` files and mode checks (RM-047).
 - [x] **SB-034** Implement sanitized logs, request IDs, model/profile/time/usage metrics, and basic `/healthz` without secret/prompt disclosure.
   - Tests verify unique server IDs, headers on success and auth errors, exact model logging, hashed conversation IDs, and absence of prompt/answer/token markers (RM-035/RM-036).
-- [x] **SB-035** Add the full security regression matrix; authentication, principal mapping, Host/Origin, rate limit, and model validation are tested, but every listed adversarial case is not yet covered.
+- [x] **SB-035** Add security tests for unauthenticated calls to both tools, forged client identity, cross-client IDs, malicious input text, unapproved model selection, oversized payloads, and accidental secret logging.
+  - Evidence: unauthenticated calls to both tools `test_unauthenticated_calls_to_each_tool_never_reach_backend` (no header, wrong token, wrong scheme × both tools); forged client identity `test_forged_identity_in_arguments_and_headers_is_ignored`; cross-client IDs `test_cross_principal_unknown_id_is_indistinguishable`; malicious input text `test_prompt_injection_is_sent_as_untrusted_user_data`; unapproved model selection `test_rejects_conflicting_and_unapproved_models`, `test_continuation_rejects_revoked_direct_model`; oversized payloads `test_oversized_mcp_body_returns_413_without_tool_call`, `test_character_limits_and_oversized_rejection_write_nothing`; accidental secret logging `test_tool_logs_are_correlatable_and_do_not_contain_content`.
+  - Note: uvicorn access-log coverage is added by RM2-023.
   - The completed R-51 matrix adds malformed/non-ASCII credentials, untrusted host/origin, oversized/malformed requests, cross-principal indistinguishability, prompt injection, and cancellation coverage.
 
 **Gate P3:** Local MCP access is authenticated, isolated, and safe on a shared workstation.
@@ -98,15 +103,26 @@
 
 ## Phase 5 — Real client smoke tests (P0 release gates)
 
-- [x] **SB-050** Verify the four exact model tags using live `list_models` backed by `/api/tags` and loaded status from `/api/ps`; private runtime config uses the discovered tags.
-- [x] **SB-051** Run actual Ollama conversation with `32k`; see verification record for latency, token counts, and effective model.
-- [x] **SB-052** Configure Codex local HTTP MCP; live listing and two-turn continuation passed. A separate MCP restart check confirmed persisted history survives restart.
-- [x] **SB-053** Configure Claude Code local HTTP MCP; live listing and two-turn continuation passed. A separate MCP restart check confirmed persisted history survives restart.
-- [ ] **SB-054** Register/connect the authorized remote endpoint in the owner's actual ChatGPT environment and verify live `list_models` and `ask_second_brain` calls, then a conversation continuation. **[BLOCKED: no remote endpoint or ChatGPT workspace access.]**
-- [x] **SB-055** Documented the exact ChatGPT validation blocker; no workaround or validation claim is made.
-- [x] **SB-056** Presented a Codex-owned conversation ID using the distinct Claude Code token; the server denied access as unavailable.
-- [x] **SB-057** Perform targeted smoke tests for `4k`, `128k`, and `256k`; measured short requests and checked `ollama ps` context/GPU-offload behavior.
-- [x] **SB-058** Asked an independent problem with no host answer, then challenged its reasoning in the same conversation; the follow-up rederived and checked the arithmetic.
+- [x] **SB-050** Verify the four exact Qwen3.5 9B model tags via live `list_models` backed by `/api/tags`, and check loaded status from `/api/ps`; update private runtime config with real names.
+  - Evidence: recorded live `list_models` returned the four exact configured tags (verification record). Re-checked 2026-10-26 with `ollama list`: `qwen3.5:9b`, `qwen35-32k:latest`, `qwen35-128k:latest`, `qwen35-256k:latest` are installed and match the private `config.yaml`; loaded status from `/api/ps` is shown in the SB-057 evidence.
+- [x] **SB-051** Run actual Ollama conversation with `32k` profile. Record latency, Ollama-reported token counts, and effective model name.
+  - Evidence: verification record row "Existing Ollama 32K profile": `qwen35-32k:latest`, 129 prompt / 50 completion tokens, 607 ms.
+- [ ] **SB-052** Configure Codex to use local HTTP MCP; confirm both-tool discovery, `list_models` results, first question, follow-up using returned ID, and persistence across restart.
+  - Evidence: recorded live Codex run listed profiles and made two `ask_second_brain` calls; the follow-up used the returned ID.
+  - Note: unchecked after restoring the original text. The record shows restart persistence as a separate server-level check, not through Codex, and both-tool discovery is not recorded explicitly. The local server (started 2026-10-25 22:42) also predates the round-1 fixes. Needs a live Codex re-run against current code, including a server restart.
+- [ ] **SB-053** Configure Claude Code to use local HTTP MCP; confirm the same discovery, model-listing, and conversation checks.
+  - Evidence: recorded live Claude Code run listed profiles and made two `ask_second_brain` calls; the follow-up used the returned ID.
+  - Note: unchecked for the same reasons as SB-052. The running local server predates the round-1 fixes (its published `mode` schema has no `enum`), so a Claude Code re-run needs the server restarted on current code.
+- [ ] **SB-054** Register/connect the authorized remote endpoint in the owner's actual ChatGPT environment and verify live `list_models` and `ask_second_brain` calls, then a conversation continuation. **[EXTERNAL ACCESS MAY BLOCK]**
+  - Note: Blocked — no remote endpoint or ChatGPT workspace access.
+- [x] **SB-055** If ChatGPT cannot connect because of account/workspace permission, connector transport, or auth policy, document the exact issue and evidence; do not mark ChatGPT validated or invent a workaround.
+  - Evidence: the exact blocker (no authenticated remote endpoint, no eligible ChatGPT workspace) is documented in `docs/integrations/local-clients.md`, `README.md`, and the verification record; ChatGPT is not marked validated and no workaround is offered.
+- [x] **SB-056** Run a cross-client isolation test with distinct principals and intentionally presented foreign conversation IDs.
+  - Evidence: live run presented a Codex-owned conversation ID with the Claude Code token and received `conversation is unavailable`; the opt-in live test repeats this cross-principal denial.
+- [x] **SB-057** Perform targeted smoke tests for `4k`, `128k`, and `256k` profiles; measure speed and `ollama ps` context/GPU-offload behavior without assuming all work remains entirely on GPU.
+  - Evidence (run 2026-10-26 during RM2-003, direct `/api/chat` with each profile's `num_ctx`, then `ollama ps`): `4k` `qwen3.5:9b` 2,274 ms, 100% GPU, context 4096; `128k` `qwen35-128k:latest` 3,521 ms, 100% GPU, context 131072; `256k` `qwen35-256k:latest` 4,177 ms, 7%/93% CPU/GPU, context 262144. Times are Ollama `total_duration` including model load.
+- [x] **SB-058** Verify independent critique workflow: ask for an original solution *without* the host's answer; then follow up in the same conversation to challenge its reasoning.
+  - Evidence: recorded live run asked an independent problem without the host's answer, then challenged the reasoning in the same conversation; the follow-up rederived and checked the arithmetic.
 
 **Gate P5:** Codex and Claude Code pass live tests; ChatGPT either passes or has an accurately documented external blocker. Full three-client integration cannot be claimed without SB-054 passing.
 
@@ -114,8 +130,10 @@
 
 - [x] **SB-060** Finish regression suite: restarts, timeouts, cancellations, SQLite contention, malformed requests, oversized questions, long histories, and model outages.
   - Added explicit SQLite lock-contention rollback and malformed MCP JSON tests; the full mocked suite covers the remaining clauses (RM-051/RM-060).
-- [x] **SB-061** Documented private persistent data, file permissions, backup/restore, logging, and deletion behavior in `docs/operations.md`.
-- [ ] **SB-062** Provide systemd unit and Ubuntu setup; an example and setup instructions exist, but startup/restart/shutdown cannot be demonstrated because this environment is not booted with systemd.
+- [x] **SB-061** Review data privacy: secure file permissions, backup/restore, no prompt/secret logging, explicit persistence documentation, and deletion behavior.
+  - Evidence: `docs/operations.md` documents persistence, permissions, backup/restore, logging, and deletion; `test_new_database_uses_wal_foreign_keys_version_and_restrictive_mode` checks `0600`/`0700`; `test_tool_logs_are_correlatable_and_do_not_contain_content` checks no prompt or secret logging.
+- [ ] **SB-062** Provide systemd unit and direct Ubuntu setup; demonstrate startup/restart/shutdown without Docker/Podman.
+  - Note: example unit and setup instructions exist, but startup/restart/shutdown cannot be demonstrated because this environment is not booted with systemd.
 - [ ] **SB-063** Provide separate Codex, Claude Code, and ChatGPT connection guides, `list_models` examples, sample prompts, profile/direct-model selection, troubleshooting, and secure token instructions.
   - Local client guidance exists. ChatGPT remote setup remains blocked by missing ingress and workspace access.
 - [x] **SB-064** Document runtime configuration, admin CLI, profile switching, usage reporting, backup, migration, and removal.

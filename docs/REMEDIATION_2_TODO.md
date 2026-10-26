@@ -22,16 +22,20 @@
 - [x] **RM2-001** Add the R2-01 working rule (acceptance sub-bullets are requirement text; unmet checks stay unchecked) to `docs/TODO.md` and `docs/REMEDIATION_TODO.md` (R2-01).
   - Acceptance: both files' working rules contain the rule; no existing item text changes in this commit.
   - Evidence: one working-rule bullet inserted in each file; `git diff --stat` shows exactly one added line per file and no other changes.
-- [ ] **RM2-002** Add `scripts/check_todo_integrity.py` with the five checks, baseline pairs, and exit codes from R2-02 (R2-02).
+- [x] **RM2-002** Add `scripts/check_todo_integrity.py` with the five checks, baseline pairs, and exit codes from R2-02 (R2-02).
   - Test: temporary-git-repo tests cover a removed item, changed item text, removed `Test:` sub-bullet, changed `Acceptance:` sub-bullet, changed gate line, an allowed `Owner decision (YYYY-MM-DD):` change, and a clean file (exit 0).
   - Acceptance: run against the current repository *before* RM2-003 and RM2-004, it reports violations for SB-001, SB-028, SB-035, SB-050–SB-058, SB-061, SB-062, RM-019, RM-051, and RM-052. Record the output as evidence.
   - Evidence: `tests/unit/test_todo_integrity.py` (8 tests: clean file, removed item, changed item text, removed `Test:`, changed `Acceptance:`, changed gate, dated owner decision allowed, undated owner decision rejected) passes. Baseline for this file is `54e4554`, the commit that first added it.
   - Evidence: `uv run python scripts/check_todo_integrity.py` before RM2-003/RM2-004 exited 1 with exactly 17 violations: "requirement text changed" for SB-001, SB-028, SB-035, SB-050, SB-051, SB-052, SB-053, SB-054, SB-055, SB-056, SB-057, SB-058, SB-061, SB-062, and "requirement sub-bullet changed or removed" for RM-019 (`Test:`), RM-051 (`Acceptance:`), RM-052 (`Acceptance:`).
   - Note: only `Test:` / `Acceptance:` sub-bullets are checked, as R2-02 specifies; `Evidence required:` lines in this file are not covered by the checker.
-- [ ] **RM2-003** Restore the original text of the 14 SB items in R2-03's table. Move current status and evidence into `Evidence:` / `Note:` sub-bullets, and re-evaluate each checkbox against the restored text (R2-03). Depends on RM2-002.
+- [x] **RM2-003** Restore the original text of the 14 SB items in R2-03's table. Move current status and evidence into `Evidence:` / `Note:` sub-bullets, and re-evaluate each checkbox against the restored text (R2-03). Depends on RM2-002.
   - Acceptance: the checker reports zero violations for `docs/TODO.md`; SB-062 is unchecked; SB-028 and SB-035 are checked only if their evidence notes name a test for every listed clause.
-- [ ] **RM2-004** Restore the RM-019, RM-051, and RM-052 acceptance lines from `ca3a444`. Uncheck RM-010, RM-019, and RM-060 until RM2-010 passes (R2-04). Depends on RM2-002.
+  - Evidence: all 14 items restored to their `5f245be` text; prior status moved into `Evidence:` / `Note:` sub-bullets. Checker reports zero violations.
+  - Evidence: unchecked after re-evaluation: SB-052 and SB-053 (restart persistence not shown through the client; local server predates round-1 fixes), SB-054 (blocked), SB-062 (no systemd). SB-028 and SB-035 name a test per clause.
+  - Evidence: added `tests/security/test_principal_boundary.py` (7 tests) to cover SB-035's "unauthenticated calls to both tools" and "forged client identity" clauses, which had no test. SB-057 was re-measured live on 2026-10-26 (all three profiles plus `ollama ps`).
+- [x] **RM2-004** Restore the RM-019, RM-051, and RM-052 acceptance lines from `ca3a444`. Uncheck RM-010, RM-019, and RM-060 until RM2-010 passes (R2-04). Depends on RM2-002.
   - Acceptance: the checker reports zero violations for `docs/REMEDIATION_TODO.md`; RM-010, RM-019, and RM-060 are unchecked with a `Note:` pointing to RM2-010.
+  - Evidence: the three `ca3a444` lines restored verbatim; the replacement notes kept as `Evidence:` sub-bullets; RM-010, RM-019, RM-060 unchecked with the RM2-010 note. `uv run python scripts/check_todo_integrity.py`: "TODO integrity check passed".
 - [ ] **RM2-005** Produce round-1 fail-first evidence. In a temporary git worktree at `ca3a444`, run each round-1 bug's regression test, then add the per-bug Gate R1 `Note:` from R2-05 to `docs/REMEDIATION_TODO.md` (R2-05, R2-06).
   - Acceptance: the note covers all twelve round-1 bugs, each marked "failed at `ca3a444`" with the test name, or "not runnable at `ca3a444`" with a reason; the worktree is removed afterwards.
 - [ ] **RM2-006** Correct the Status lines of `docs/TODO.md` and `docs/REMEDIATION_TODO.md` so they name all open or unrepeated items (R2-05).
