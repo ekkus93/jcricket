@@ -106,8 +106,8 @@ token_env: {{codex: LEAK_CODEX_TOKEN, claude-code: LEAK_CLAUDE_TOKEN}}
     assert unauthenticated.status_code == 401
     assert invalid.status_code == 401
     assert valid.status_code == 200
-    assert valid.json()["result"]["content"][0]["text"].startswith(
-        "ollama_unavailable:"
+    assert valid.json()["result"]["content"][0]["text"] == (
+        "ollama_unavailable: Ollama is unavailable or rejected the request"
     )
     assert query.status_code == 200
     output = log_path.read_text(encoding="utf-8")

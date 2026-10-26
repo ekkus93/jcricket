@@ -103,8 +103,7 @@ def test_ask_handler_sanitizes_unexpected_exceptions(
     result = response.json()["result"]
     assert result["isError"] is True
     content = " ".join(part.get("text", "") for part in result["content"])
-    # FastMCP adds its standard tool-name prefix around the handler error.
-    assert content.endswith("internal_error: the server could not complete the request")
+    assert content == "internal_error: the server could not complete the request"
     assert "private SQL marker" not in content
     assert "private parser marker" not in content
 
@@ -139,7 +138,7 @@ def test_list_models_handler_sanitizes_unexpected_exceptions(
     result = response.json()["result"]
     content = " ".join(part.get("text", "") for part in result["content"])
     assert result["isError"] is True
-    assert content.endswith("internal_error: the server could not complete the request")
+    assert content == "internal_error: the server could not complete the request"
     assert "private inventory marker" not in content
 
 

@@ -145,7 +145,7 @@ async def test_live_ollama_mcp_and_restart_persistence(tmp_path: Path) -> None:
         error_text = " ".join(
             item.text for item in invalid.content if hasattr(item, "text")
         )
-        assert error_text.endswith("invalid_input: question must not be empty")
+        assert error_text == "invalid_input: question must not be empty"
 
         first = await session.call_tool(
             "ask_second_brain",
@@ -179,7 +179,7 @@ async def test_live_ollama_mcp_and_restart_persistence(tmp_path: Path) -> None:
         denied_text = " ".join(
             item.text for item in denied.content if hasattr(item, "text")
         )
-        assert "conversation_unavailable" in denied_text
+        assert denied_text == "conversation_unavailable: conversation is unavailable"
         await close_session(other_http_client, other_transport, other_session)
 
         await _stop(process)

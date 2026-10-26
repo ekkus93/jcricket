@@ -133,8 +133,9 @@
   - Test: after 50 asks plus one cancelled mid-inference ask, the lock registry is empty; with two asks contending for one conversation and the waiter cancelled, the registry is empty after the holder completes.
   - Evidence: `test_lock_registry_is_empty_after_many_asks_and_a_cancelled_ask` (50 asks, then one ask cancelled while blocked in `/api/chat`; registry held 1 lock mid-inference and is empty after) and `test_lock_registry_is_empty_after_cancelled_waiter` (holder blocked in Ollama, waiter on the same conversation lock with refcount 2, waiter cancelled, holder completes; registry empty and admission count 0). Both pass; full suite 193 passed, 1 skipped.
   - Note: these are coverage additions for already-correct code, not a bug fix, so there is no fail-first evidence.
-- [ ] **RM2-025** Replace suffix and `endswith` error checks in server and live tests with exact-equality checks (R2-30). Depends on RM2-010.
+- [x] **RM2-025** Replace suffix and `endswith` error checks in server and live tests with exact-equality checks (R2-30). Depends on RM2-010.
   - Acceptance: `grep -rn "endswith(\"invalid_input\|endswith('invalid_input" tests` finds nothing; the live test compares the full error text.
+  - Evidence: suffix checks replaced with exact equality in `tests/integration/test_server.py` (both sanitizer tests), `tests/integration/test_access_log_leakage.py`, and `tests/live/test_live_server.py` (`invalid_input: question must not be empty` and `conversation_unavailable: conversation is unavailable`). The acceptance grep returns no matches; full suite 193 passed, 1 skipped. The live test itself is run in RM2-040.
 
 ## Phase D — Documentation and reconciliation (P1)
 
