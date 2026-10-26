@@ -103,9 +103,11 @@
   - Evidence required: the `chatgpt --env-var` test fails on `ad85cdb` (invalid choice).
   - Evidence (fail first): on the unfixed helper `test_auth_header_helper_accepts_other_principal_with_env_var` failed with `invalid choice: 'chatgpt' (choose from codex, claude-code)`.
   - Evidence (after fix): `deploy/auth_headers.py` validates the name against `[a-z][a-z0-9-]{0,31}` and requires `--env-var` for names outside the default map (argparse error, exit 2). The three new tests in `tests/security/test_auth_headers.py` pass; full suite 184 passed, 1 skipped.
-- [ ] **RM2-018** Add `proxy_set_header Authorization "";` plus an explanatory comment to `deploy/reverse-proxy.example` (R2-20).
+- [x] **RM2-018** Add `proxy_set_header Authorization "";` plus an explanatory comment to `deploy/reverse-proxy.example` (R2-20).
   - Test: the R2-20 assertions on the `location = /mcp` block.
   - Evidence required: the test fails on `ad85cdb` (no Authorization clearing).
+  - Evidence (fail first): `tests/security/test_deploy_examples.py::test_proxy_example_strips_client_authorization` failed on the unfixed example (`proxy_set_header Authorization "";` absent from the `/mcp` block).
+  - Evidence (after fix): the `/mcp` location now clears `Authorization` with an explanatory comment; the test passes; full suite 185 passed, 1 skipped.
 
 **Gate B:** Every Phase B task has fail-first evidence recorded; the client-visible error text is exactly `<code>: <message>` in every tested case.
 
