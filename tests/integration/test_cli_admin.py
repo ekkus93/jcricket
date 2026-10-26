@@ -55,11 +55,13 @@ def _store_with_two_principals(path: Path) -> tuple[ConversationStore, str, str]
 
 def test_get_any_prints_metadata_or_reports_unknown(tmp_path: Path, capsys) -> None:
     store, codex, _claude = _store_with_two_principals(tmp_path / "db.sqlite3")
-    cli._conversations(store.path, _args("get-any", conversation_id=codex))
+    cli._conversations(store.path, None, _args("get-any", conversation_id=codex))
     metadata = json.loads(capsys.readouterr().out)
     assert (metadata["id"], metadata["principal"]) == (codex, "codex")
     with pytest.raises(SystemExit, match="conversation not found"):
-        cli._conversations(store.path, _args("get-any", conversation_id="missing"))
+        cli._conversations(
+            store.path, None, _args("get-any", conversation_id="missing")
+        )
 
 
 @pytest.mark.parametrize(("principal", "expected"), [(None, 2), ("codex", 1)])
@@ -67,7 +69,7 @@ def test_export_all_to_stdout(
     tmp_path: Path, capsys, principal: str | None, expected: int
 ) -> None:
     store, codex, _claude = _store_with_two_principals(tmp_path / "db.sqlite3")
-    cli._conversations(store.path, _args("export", principal=principal))
+    cli._conversations(store.path, None, _args("export", principal=principal))
     records = json.loads(capsys.readouterr().out)
     assert len(records) == expected
     if principal:
@@ -80,7 +82,7 @@ def test_export_unknown_id_creates_no_file(tmp_path: Path) -> None:
     output = tmp_path / "export.json"
     with pytest.raises(SystemExit, match="conversation not found"):
         cli._conversations(
-            store.path, _args("export", conversation_id="missing", output=output)
+            store.path, None, _args("export", conversation_id="missing", output=output)
         )
     assert not output.exists()
 
@@ -88,7 +90,7 @@ def test_export_unknown_id_creates_no_file(tmp_path: Path) -> None:
 def test_purge_without_age_or_retention_is_refused(tmp_path: Path) -> None:
     store, _codex, _claude = _store_with_two_principals(tmp_path / "db.sqlite3")
     with pytest.raises(SystemExit) as exc_info:
-        cli._conversations(store.path, _args("purge"))
+        cli._conversations(store.path, None, _args("purge"))
     assert str(exc_info.value) == (
         "purge requires --older-than or configured retention_days"
     )
@@ -104,7 +106,7 @@ def test_interactive_yes_confirms_delete(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr("second_brain_mcp.cli.sys.stdin", InteractiveInput())
     monkeypatch.setattr("builtins.input", lambda _prompt: "y")
-    cli._conversations(store.path, _args("delete", conversation_id=codex))
+    cli._conversations(store.path, None, _args("delete", conversation_id=codex))
     assert [row["id"] for row in store.list()] == [claude]
 
 

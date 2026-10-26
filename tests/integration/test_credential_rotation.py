@@ -10,6 +10,13 @@ import pytest
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "init_credentials.py"
 
 
+def _module():
+    spec = importlib.util.spec_from_file_location("init_credentials", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _values(path: Path) -> dict[str, str]:
     return dict(
         line.split("=", 1)
@@ -108,9 +115,7 @@ def test_unwritable_service_directory_leaves_user_file_unchanged(
 def test_failed_replacement_restores_already_rotated_files(
     tmp_path: Path, monkeypatch
 ) -> None:
-    spec = importlib.util.spec_from_file_location("init_credentials", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _module()
     _home, user_file, service_file = _setup(tmp_path)
     original_user = user_file.read_text(encoding="utf-8")
     original_service = service_file.read_text(encoding="utf-8")
@@ -121,6 +126,7 @@ def test_failed_replacement_restores_already_rotated_files(
             raise PermissionError("simulated replace failure")
         return real_replace(source, destination)
 
+    # `module.os` is the process-wide `os` module; monkeypatch restores the patch.
     monkeypatch.setattr(module.os, "replace", failing_replace)
     with pytest.raises(module.RotationError, match=str(service_file)):
         module.rotate([user_file, service_file], {"CODEX_MCP_TOKEN": "n" * 64})
@@ -166,13 +172,6 @@ def test_create_refuses_existing_file_without_traceback(tmp_path: Path) -> None:
     assert user_file.read_text(encoding="utf-8") == original
 
 
-def _module():
-    spec = importlib.util.spec_from_file_location("init_credentials", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def test_create_writes_private_file_with_distinct_tokens(tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()
@@ -207,6 +206,7 @@ def test_rotate_user_file_only(tmp_path: Path) -> None:
 
 def test_rotation_as_root_preserves_file_owner(tmp_path: Path, monkeypatch) -> None:
     module = _module()
+    # `module.os` is the process-wide `os` module; monkeypatch restores the patch.
     _home, user_file, _service_file = _setup(tmp_path)
     owner = user_file.stat()
     chowned: list[tuple[int, int]] = []
@@ -221,6 +221,7 @@ def test_rotation_as_root_preserves_file_owner(tmp_path: Path, monkeypatch) -> N
 
 def test_staging_failure_removes_temporary_files(tmp_path: Path, monkeypatch) -> None:
     module = _module()
+    # `module.os` is the process-wide `os` module; monkeypatch restores the patch.
     _home, user_file, _service_file = _setup(tmp_path)
     original = user_file.read_text(encoding="utf-8")
 

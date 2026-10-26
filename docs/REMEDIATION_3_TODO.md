@@ -61,9 +61,10 @@
   - Test: `test_two_hundred_selectable_tags_are_allowed` asserts `len(allowed_models) == 196` and that the 200 selectable tags are distinct.
   - Test: `test_auth_header_helper_rejects_invalid_env_var_name` asserts the 64-character token is absent from `stderr`.
   - Evidence: `test_two_hundred_selectable_tags_are_allowed` now asserts `len(allowed_models) == 196` and 200 distinct selectable tags; `test_auth_header_helper_rejects_invalid_env_var_name` asserts `"f" * 64 not in result.stderr`. Both pass.
-- [ ] **RM3-022** Test hygiene and the `_conversations` signature (R3-22).
+- [x] **RM3-022** Test hygiene and the `_conversations` signature (R3-22).
   - Acceptance: `test_failed_replacement_restores_already_rotated_files` uses `_module()`, which is defined before its first use; the two `module.os` patches carry the required comment.
   - Acceptance: `cli._conversations(database_path, retention_days, args)` replaces the duck-typed signature; `main()` passes `config.database_path, config.retention_days`; `getattr(config, "database_path", config)` no longer exists; every caller in `tests/` passes explicit arguments; the full suite passes.
+  - Evidence: `_conversations(database_path: Path, retention_days: int | None, args)` replaces the `getattr` duck typing (`grep -rn "getattr(config" src` finds nothing); `main()` passes `config.database_path, config.retention_days`; all 20 test call sites were updated mechanically (config → its two attributes, bare path → `None` retention), preserving the previous behavior. `tests/integration/test_credential_rotation.py`: `_module()` now sits above its first use and `test_failed_replacement_restores_already_rotated_files` calls it; the three tests that patch `module.os` carry the process-wide-`os` comment. Full suite 283 passed, 1 skipped.
 
 ## Phase D — Server (P1)
 

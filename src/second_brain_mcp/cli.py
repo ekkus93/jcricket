@@ -56,7 +56,7 @@ def main() -> None:
     if args.command == "check-config":
         print("Configuration is valid.")
     elif args.command == "conversations":
-        _conversations(config, args)
+        _conversations(config.database_path, config.retention_days, args)
     else:
         from .server import run
 
@@ -82,9 +82,9 @@ def _verify_context_windows(config: AppConfig, *, required: bool) -> None:
         raise SystemExit(1)
 
 
-def _conversations(config: Any, args: argparse.Namespace) -> None:
-    database_path = getattr(config, "database_path", config)
-    retention_days = getattr(config, "retention_days", None)
+def _conversations(
+    database_path: Path, retention_days: int | None, args: argparse.Namespace
+) -> None:
     store = ConversationStore(database_path)
     if args.action == "list":
         print(json.dumps(store.list(args.principal), indent=2))

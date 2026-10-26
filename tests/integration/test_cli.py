@@ -50,10 +50,10 @@ def test_purge_requires_confirmation_and_confirmation_flag(
     )
     monkeypatch.setattr("builtins.input", lambda _: "n")
     with pytest.raises(SystemExit, match="Cancelled"):
-        _conversations(store.path, args)
+        _conversations(store.path, None, args)
     assert len(store.list()) == 1
     args.yes = True
-    _conversations(store.path, args)
+    _conversations(store.path, None, args)
     assert "Deleted 1 conversations" in capsys.readouterr().out
     assert store.list() == []
 
@@ -71,7 +71,8 @@ def test_purge_uses_configured_retention(
             (old, conversation.id),
         )
     _conversations(
-        config,
+        config.database_path,
+        config.retention_days,
         Namespace(action="purge", older_than=None, yes=True),
     )
     assert "Deleted 1" in capsys.readouterr().out
@@ -95,7 +96,8 @@ def test_export_creates_private_file_and_refuses_overwrite(tmp_path: Path) -> No
     )
     output = tmp_path / "export.json"
     _conversations(
-        config,
+        config.database_path,
+        config.retention_days,
         Namespace(
             action="export",
             conversation_id=conversation_id,
@@ -109,7 +111,8 @@ def test_export_creates_private_file_and_refuses_overwrite(tmp_path: Path) -> No
     assert exported[0]["turns"][0]["content"] == "question"
     with pytest.raises(FileExistsError):
         _conversations(
-            config,
+            config.database_path,
+            config.retention_days,
             Namespace(
                 action="export",
                 conversation_id=conversation_id,
@@ -137,22 +140,36 @@ def test_list_filter_show_unknown_and_delete_paths(tmp_path: Path, capsys) -> No
             new_conversation=True,
         )
 
-    _conversations(config, Namespace(action="list", principal="codex"))
+    _conversations(
+        config.database_path,
+        config.retention_days,
+        Namespace(action="list", principal="codex"),
+    )
     listed = json.loads(capsys.readouterr().out)
     assert [item["id"] for item in listed] == [codex_id]
-    _conversations(config, Namespace(action="show", conversation_id=codex_id))
+    _conversations(
+        config.database_path,
+        config.retention_days,
+        Namespace(action="show", conversation_id=codex_id),
+    )
     shown = json.loads(capsys.readouterr().out)
     assert shown["conversation"]["principal"] == "codex"
     assert len(shown["turns"]) == 2
     with pytest.raises(SystemExit, match="conversation not found"):
-        _conversations(config, Namespace(action="show", conversation_id="missing"))
+        _conversations(
+            config.database_path,
+            config.retention_days,
+            Namespace(action="show", conversation_id="missing"),
+        )
     with pytest.raises(SystemExit, match="Cancelled"):
         _conversations(
-            config,
+            config.database_path,
+            config.retention_days,
             Namespace(action="delete", conversation_id=codex_id, yes=False),
         )
     _conversations(
-        config,
+        config.database_path,
+        config.retention_days,
         Namespace(action="delete", conversation_id=codex_id, yes=True),
     )
     assert store.get_any(codex_id) is None
@@ -176,7 +193,8 @@ def test_eof_at_delete_confirmation_is_cancelled(
     )
     with pytest.raises(SystemExit, match="Cancelled"):
         _conversations(
-            config,
+            config.database_path,
+            config.retention_days,
             Namespace(action="delete", conversation_id=conversation.id, yes=False),
         )
     assert store.get_any(conversation.id) is not None
@@ -191,7 +209,7 @@ def test_delete_requires_an_existing_id(tmp_path: Path) -> None:
         yes=True,
     )
     with pytest.raises(SystemExit, match="conversation not found"):
-        _conversations(tmp_path / "db.sqlite3", args)
+        _conversations(tmp_path / "db.sqlite3", None, args)
 
 
 VALID_PROFILES = """profiles:
