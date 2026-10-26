@@ -1,6 +1,6 @@
 # Second Brain MCP — Implementation TODO
 
-**Status:** Local v0.1 implementation verified; remote ChatGPT access and systemd lifecycle remain external blockers
+**Status:** In progress — local v0.1 implemented. Open: SB-002 (spec files not at repository root), SB-040 (dropped by owner decision 2026-10-26), SB-041–SB-046 and SB-054 (blocked: no remote endpoint or ChatGPT workspace), SB-052 and SB-053 (need live client re-runs on current code, including restart), SB-062 (no systemd host), SB-063 (ChatGPT guide blocked); SB-100–SB-107 deferred. Round-2 remediation is in progress in `docs/REMEDIATION_2_TODO.md`.
 **Date:** 2026-10-25  
 **Reference:** [SPEC.md](SPEC.md)  
 **Repository:** `ekkus93/jcricket` (working tree implementation in progress)

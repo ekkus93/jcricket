@@ -39,8 +39,9 @@
 - [x] **RM2-005** Produce round-1 fail-first evidence. In a temporary git worktree at `ca3a444`, run each round-1 bug's regression test, then add the per-bug Gate R1 `Note:` from R2-05 to `docs/REMEDIATION_TODO.md` (R2-05, R2-06).
   - Acceptance: the note covers all twelve round-1 bugs, each marked "failed at `ca3a444`" with the test name, or "not runnable at `ca3a444`" with a reason; the worktree is removed afterwards.
   - Evidence: ran 17 regression tests at `ca3a444` in a detached worktree with current `tests/` copied in. Bugs 3, 7, 12 failed for the expected reason; the other 9 could not be collected (`second_brain_mcp.errors` / `store.ModelSelection` did not exist). Per-bug note added under Gate R1 in `docs/REMEDIATION_TODO.md`; `git worktree list` shows only the main worktree.
-- [ ] **RM2-006** Correct the Status lines of `docs/TODO.md` and `docs/REMEDIATION_TODO.md` so they name all open or unrepeated items (R2-05).
+- [x] **RM2-006** Correct the Status lines of `docs/TODO.md` and `docs/REMEDIATION_TODO.md` so they name all open or unrepeated items (R2-05).
   - Acceptance: neither line claims completion without listing the exceptions (at least: RM-010/019/060 pending RM2-010, SB-062, SB-063, SB-040 dropped, SB-041–046 and SB-054 blocked).
+  - Evidence: both Status lines now start "In progress" and name every unchecked item (from `grep '^- \[ \]'`), including SB-002, SB-052, SB-053, the Gate R1 limitation, and the unrepeated RM-052/RM-053 live evidence.
 
 **Gate A:** The integrity checker exists and passes on `docs/TODO.md` and `docs/REMEDIATION_TODO.md`; no TODO claims more than its evidence supports.
 

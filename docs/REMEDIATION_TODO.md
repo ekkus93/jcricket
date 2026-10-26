@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation TODO
 
-**Status:** Complete — Phases R0–R5 passed; external ChatGPT and systemd lifecycle blockers remain documented
+**Status:** In progress — RM-010, RM-019, and RM-060 are reopened until REMEDIATION_2 task RM2-010 delivers the exact `<code>: <message>` error text. Gate R1's "failed before the fix" clause is met for 3 of 12 bugs only (see the note under Gate R1). RM-052 and RM-053 rely on live runs recorded on 2026-10-26 that have not been repeated on later code.
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_SPEC.md](REMEDIATION_SPEC.md) (requirements `R-xx`), [SPEC.md](SPEC.md)  
 **Related:** [TODO.md](TODO.md) (original v0.1 items `SB-xxx`)
