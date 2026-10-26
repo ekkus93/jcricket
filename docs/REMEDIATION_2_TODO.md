@@ -125,8 +125,10 @@
 - [x] **RM2-022** Delete `ConversationStore.create`, `add_turn`, and `update_selection`; migrate tests to `record_turn` or a `conftest.py` helper (R2-22).
   - Acceptance: `grep -rnE "\.create\(|add_turn|update_selection" src tests` finds no `ConversationStore` uses; the full suite passes.
   - Evidence: `create`, `add_turn`, and `update_selection` removed from `src/second_brain_mcp/store.py`; tests now use `record_turn` directly or the `make_conversation` fixture in `tests/conftest.py`. The acceptance grep returns no matches; full suite 190 passed, 1 skipped.
-- [ ] **RM2-023** Add the subprocess uvicorn access-log leakage test (R2-23).
+- [x] **RM2-023** Add the subprocess uvicorn access-log leakage test (R2-23).
   - Test: no question, context, or token marker appears in captured server output; the test runs under plain pytest without Ollama in under 30 seconds.
+  - Evidence: `tests/integration/test_access_log_leakage.py` starts `second_brain_mcp.cli serve` (real uvicorn, `log_level: DEBUG`, Ollama pointed at closed port 9), sends unauthenticated, invalid-token, valid, and query-string requests, and checks the captured stdout/stderr (45 lines including uvicorn access lines) contains no `QUESTIONMARKER`, `CONTEXTMARKER`, or `TOKENMARKER`. Runs in about 0.5 s; full suite 191 passed, 1 skipped.
+  - Note: uvicorn's access log does record query strings (`POST /mcp?note=QUERYMARKER`). The server never reads credentials or prompts from the query string, so nothing sensitive is logged through normal use.
 - [ ] **RM2-024** Add the cancelled-ask lock-cleanup cases (R2-14).
   - Test: after 50 asks plus one cancelled mid-inference ask, the lock registry is empty; with two asks contending for one conversation and the waiter cancelled, the registry is empty after the holder completes.
 - [ ] **RM2-025** Replace suffix and `endswith` error checks in server and live tests with exact-equality checks (R2-30). Depends on RM2-010.
