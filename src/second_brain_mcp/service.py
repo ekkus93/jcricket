@@ -292,8 +292,6 @@ class SecondBrainService:
                 break
             included[0:0] = [user_turn, assistant_turn]
             remaining -= pair_cost
-        if len(included) != len(history):
-            trimmed = True
         messages = [{"role": "system", "content": system}]
         for turn in included:
             content = turn.content

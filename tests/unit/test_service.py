@@ -660,7 +660,7 @@ def test_history_pairing_skips_unpaired_rows(
         "discuss",
         32768,
     )
-    assert trimmed is True
+    assert trimmed is False
     assert [message["content"] for message in messages[1:-1]] == [
         "paired question",
         "paired answer",

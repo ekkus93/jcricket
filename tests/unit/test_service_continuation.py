@@ -10,7 +10,7 @@ import pytest
 from second_brain_mcp.errors import ServiceError
 from second_brain_mcp.ollama import OllamaClient
 from second_brain_mcp.service import SecondBrainService
-from second_brain_mcp.store import ConversationStore, ModelSelection
+from second_brain_mcp.store import ConversationStore, ModelSelection, Turn
 
 
 def _service(app_config: Any, http: httpx.AsyncClient) -> SecondBrainService:
@@ -149,7 +149,44 @@ async def test_orphan_assistant_row_is_left_out_of_the_prompt(
             "first answer",
             "discuss",
         )
-        await service.ask("codex", "current", conversation_id="orphan-id")
+        result = await service.ask("codex", "current", conversation_id="orphan-id")
 
     contents = [message["content"] for message in sent[0]["messages"][1:]]
     assert contents == ["first question", "first answer", "current"]
+    assert result["history_trimmed"] is False
+
+
+def _service_for(app_config: Any) -> SecondBrainService:
+    return SecondBrainService(
+        app_config, None, ConversationStore(app_config.database_path)
+    )
+
+
+def test_only_orphan_rows_do_not_set_history_trimmed(app_config: Any) -> None:
+    service = _service_for(app_config)
+    history = [Turn("assistant", "orphan one"), Turn("user", "orphan two")]
+    messages, trimmed = service._build_messages(
+        history, "current", None, "discuss", 32768
+    )
+    assert trimmed is False
+    assert [message["content"] for message in messages[1:]] == ["current"]
+
+
+def test_dropped_complete_pair_still_sets_history_trimmed(app_config: Any) -> None:
+    service = _service_for(app_config)
+    history = [
+        Turn("assistant", "orphan"),
+        Turn("user", "old question " + "o" * 3000),
+        Turn("assistant", "old answer"),
+        Turn("user", "newest question"),
+        Turn("assistant", "newest answer"),
+    ]
+    messages, trimmed = service._build_messages(
+        history, "current", None, "discuss", 4096
+    )
+    assert trimmed is True
+    assert [message["content"] for message in messages[1:]] == [
+        "newest question",
+        "newest answer",
+        "current",
+    ]
