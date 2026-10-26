@@ -53,7 +53,7 @@ To remove the installation, stop and disable the service, remove its unit and pa
 
 ## Troubleshooting
 
-- `401`: check that the client uses its matching principal helper and the server has the same token; rotate credentials, update both user and service credential files if both are used, restart the service, and reconnect clients.
+- `401`: check that the client uses its matching principal helper and the server has the same token; rotate credentials with `scripts/init_credentials.py --rotate` (add `--service-file` when systemd uses the service file, so both are rotated together, all-or-nothing, with a private `.bak` of the previous contents), restart the service, and reconnect clients. For principals other than `codex` and `claude-code`, run the helper with `--env-var NAME`.
 - `403`: confirm loopback Host/Origin policy and that requests use the configured local URL.
 - Missing model/profile: compare exact configured tags with `ollama list`; check loaded models with `ollama ps`.
 - Timeout or queue-full response: verify Ollama is responsive and lower inference concurrency; large context profiles can take longer and consume more memory.
