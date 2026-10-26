@@ -82,12 +82,14 @@
 
 ## Phase E — Store, HTTP, CLI, and helper scripts (P1)
 
-- [ ] **TCT-040** Store data safety (TC-40).
+- [x] **TCT-040** Store data safety (TC-40).
   - Test: a database at `user_version = 3` raises the "newer than this application" `RuntimeError` and is left byte-for-byte unchanged; `purge(0)` and `purge(-1)` raise `older_than_days must be positive` and delete nothing; a v1 database that already has all three columns migrates to v2 without schema changes.
-- [ ] **TCT-050** HTTP and error-contract edges (TC-50).
+  - Evidence: `tests/unit/test_store_safety.py` — `test_newer_schema_is_refused_and_left_unchanged` (exact message, file bytes identical), `test_purge_rejects_non_positive_age` (0 and -1; the 30-day-old conversation is still listed), `test_v1_database_with_all_new_columns_only_bumps_version` (`user_version` 2, `sqlite_master` identical). No defect found.
+- [x] **TCT-050** HTTP and error-contract edges (TC-50).
   - Test: `GET /unknown` and `POST /mcp/extra` return 404 `{"error":"not found"}` with `X-Request-ID`.
   - Test: `current_principal()` without a principal raises exactly `unauthorized: authenticated principal required`.
   - Test: a `ToolError` caused by `RuntimeError("secret-marker")` from the parent `FastMCP.call_tool` yields exactly the `internal_error` text, no `secret-marker` or `boom` in the response, and an ERROR record with `unexpected_error_type=RuntimeError`.
+  - Evidence: `tests/integration/test_http_edges.py` — `test_unknown_paths_return_404_with_request_id` (GET `/unknown`, POST `/mcp/extra`), `test_current_principal_without_authentication_is_unauthorized`, and `test_unexpected_tool_error_falls_back_to_internal_error` (patches `FastMCP.call_tool`, the parent of our subclass). No defect found.
 - [ ] **TCT-060** Admin CLI and prompts (TC-60).
   - Test: `get-any` found and unknown; `export` of all conversations to stdout with and without `--principal`; `export <unknown> --output FILE` exits `conversation not found` and creates no file; `purge` without age or retention exits with the TC-60 message; TTY confirmation `y` deletes.
   - Test: `main()` with patched `sys.argv` dispatches `check-config` (prints `Configuration is valid.` with a patched context-window check), `conversations list`, and `serve` (patched `server.run` receives the loaded config).
