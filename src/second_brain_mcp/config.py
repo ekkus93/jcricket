@@ -148,7 +148,13 @@ class AppConfig(StrictModel):
 
     @model_validator(mode="after")
     def validate_effective_budgets(self) -> AppConfig:
-        profile_tags: dict[str, int] = {}
+        tags = [profile.model for profile in self.profiles.values()]
+        if any(_is_placeholder(tag) for tag in [*tags, *self.allowed_models]):
+            raise ValueError(
+                "model tag placeholders must be replaced with exact names from "
+                "`ollama list`"
+            )
+        profile_tags: dict[str, set[int]] = {}
         for name, profile in self.profiles.items():
             completion = profile.completion_tokens or self.limits.completion_tokens
             _validate_budget(
@@ -156,19 +162,14 @@ class AppConfig(StrictModel):
                 completion,
                 f"profile {name}",
             )
-            previous = profile_tags.setdefault(profile.model, profile.context_tokens)
-            if previous != profile.context_tokens:
-                raise ValueError(
-                    f"model tag {profile.model!r} has conflicting profile budgets; "
-                    "select it through one profile"
-                )
+            profile_tags.setdefault(profile.model, set()).add(profile.context_tokens)
         for tag, selection in self.allowed_models.items():
             completion = selection.completion_tokens or self.limits.completion_tokens
             _validate_budget(selection.context_tokens, completion, f"model {tag}")
-            profile_budget = profile_tags.get(tag)
+            profile_budgets = profile_tags.get(tag)
             if (
-                profile_budget is not None
-                and profile_budget != selection.context_tokens
+                profile_budgets is not None
+                and selection.context_tokens not in profile_budgets
             ):
                 raise ValueError(
                     f"model tag {tag!r} has a different allowed-model budget; "
@@ -247,6 +248,10 @@ class AppConfig(StrictModel):
         if len(set(credentials.values())) != len(credentials):
             raise ValueError("each configured principal must use a distinct token")
         return credentials
+
+
+def _is_placeholder(tag: str) -> bool:
+    return tag == "SET_FROM_OLLAMA_LIST" or tag.startswith("REPLACE_WITH_")
 
 
 def _validate_budget(context_tokens: int, completion_tokens: int, name: str) -> None:
