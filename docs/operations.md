@@ -61,6 +61,16 @@ Stop the service before copying the SQLite database, including its `-wal` and `-
 
 To remove the installation, stop and disable the service, remove its unit and package/configuration/credentials as appropriate, then separately delete `/var/lib/second-brain` or the local database if permanent conversation deletion is intended. Removing software does not automatically erase backups.
 
+## Test coverage
+
+Coverage is measured with `coverage` (a dev dependency), including code the tests run in subprocesses (the CLI, the scripts, and the uvicorn leakage test). Run:
+
+```sh
+uv run coverage erase && uv run coverage run -m pytest -q && uv run coverage combine && uv run coverage report
+```
+
+Configuration lives in `[tool.coverage.*]` in `pyproject.toml`; `fail_under` makes the report fail if coverage drops below the agreed level. Plain `uv run pytest` does not measure coverage, so it stays fast.
+
 ## Troubleshooting
 
 - `401`: check that the client uses its matching principal helper and the server has the same token; rotate credentials with `scripts/init_credentials.py --rotate` (add `--service-file` when systemd uses the service file, so both are rotated together, all-or-nothing, with a private `.bak` of the previous contents), restart the service, and reconnect clients. For principals other than `codex` and `claude-code`, run the helper with `--env-var NAME`.

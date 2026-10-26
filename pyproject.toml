@@ -16,6 +16,7 @@ second-brain = "second_brain_mcp.cli:main"
 
 [dependency-groups]
 dev = [
+  "coverage[toml]>=7.10",
   "pytest>=8.4,<9",
   "pytest-asyncio>=1.1,<2",
   "ruff>=0.12,<1",
@@ -40,3 +41,14 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.coverage.run]
+branch = true
+source = ["src/second_brain_mcp", "scripts", "deploy"]
+parallel = true
+patch = ["subprocess"]
+disable_warnings = ["no-data-collected", "module-not-imported"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

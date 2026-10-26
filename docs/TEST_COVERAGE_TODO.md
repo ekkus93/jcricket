@@ -19,9 +19,11 @@
 
 ## Phase A — Tooling and baseline (P0, do first)
 
-- [ ] **TCT-001** Add `coverage[toml]>=7.10` to the `dev` group, update `uv.lock`, and add `[tool.coverage.run]` (`branch`, `source`, `parallel`, `patch = ["subprocess"]`) and `[tool.coverage.report]` (`show_missing`, `skip_covered = false`) to `pyproject.toml`. Document the coverage command under a "Test coverage" heading in `docs/operations.md` (TC-01).
+- [x] **TCT-001** Add `coverage[toml]>=7.10` to the `dev` group, update `uv.lock`, and add `[tool.coverage.run]` (`branch`, `source`, `parallel`, `patch = ["subprocess"]`) and `[tool.coverage.report]` (`show_missing`, `skip_covered = false`) to `pyproject.toml`. Document the coverage command under a "Test coverage" heading in `docs/operations.md` (TC-01).
   - Acceptance: `uv sync --locked` succeeds offline; the documented command runs; `deploy/auth_headers.py` and `scripts/check_todo_integrity.py` report above 0%; `.coverage` and `.coverage.*` remain ignored by git.
   - Acceptance: record the new per-module baseline table (with subprocesses measured) in the verification record.
+  - Evidence: `uv add --dev 'coverage[toml]>=7.10'` locked `coverage==7.17.0` (an offline resolve failed because the universal lockfile needs metadata for other Python versions, so the lock step used the network); afterwards `uv sync --locked --offline` succeeds. `[tool.coverage.run]` sets `branch`, `source`, `parallel`, `patch = ["subprocess"]`, and silences the no-data/not-imported warnings so subprocess stderr assertions are unaffected; `[tool.coverage.report]` sets `show_missing` and `skip_covered = false`. `docs/operations.md` has a "Test coverage" section with the command. `git check-ignore` confirms `.coverage` and `.coverage.*` are ignored.
+  - Evidence: measured baseline — `deploy/auth_headers.py` 85%, `scripts/check_todo_integrity.py` 92% (both 0% before), `scripts/init_credentials.py` 84%, `cli.py` 81%, total 91%; table in the verification record. The measured run takes about 10 s; plain `uv run pytest` is unchanged at about 6 s.
 - [ ] **TCT-002** Add `("docs/TEST_COVERAGE_TODO.md", <commit that first adds it>)` to `BASELINES` in `scripts/check_todo_integrity.py`.
   - Acceptance: the integrity checker passes and reports violations if a `TCT` item's text or acceptance line is changed (verify once by a temporary edit, then revert).
 
@@ -111,7 +113,7 @@ Populate as work proceeds. Do **not** predeclare success.
 
 | Verification | Result | Evidence (commit/command/output) |
 |---|---|---|
-| Baseline with subprocess coverage (TCT-001) | Not run | — |
+| Baseline with subprocess coverage (TCT-001) | Recorded | 2026-10-26, on `c4eb4f1` + TCT-001 config: auth.py 96%, budget 100%, cli 81%, config 90%, errors 100%, ollama 90%, prompts 75%, schemas 100%, server 97%, service 95%, store 96%, `deploy/auth_headers.py` 85%, `scripts/check_todo_integrity.py` 92%, `scripts/init_credentials.py` 84%; total 91% (1300 statements, 88 missed, 388 branches, 56 partial). 202 passed, 1 skipped. |
 | Phase checks (sync, Ruff, pytest, coverage) | Not run | — |
 | Fail-first evidence for exposed defects (TC-03, TCT-063) | Not run | — |
 | Final coverage table and `fail_under` (TCT-070) | Not run | — |
