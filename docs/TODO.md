@@ -1,6 +1,6 @@
 # Second Brain MCP — Implementation TODO
 
-**Status:** In progress — local MCP server implemented; remote access and release hardening remain
+**Status:** Local v0.1 implementation verified; remote ChatGPT access and systemd lifecycle remain external blockers
 **Date:** 2026-10-25  
 **Reference:** [SPEC.md](SPEC.md)  
 **Repository:** `ekkus93/jcricket` (working tree implementation in progress)
@@ -118,8 +118,8 @@
 - [ ] **SB-063** Provide separate Codex, Claude Code, and ChatGPT connection guides, `list_models` examples, sample prompts, profile/direct-model selection, troubleshooting, and secure token instructions.
   - Local client guidance exists. ChatGPT remote setup remains blocked by missing ingress and workspace access.
 - [x] **SB-064** Document runtime configuration, admin CLI, profile switching, usage reporting, backup, migration, and removal.
-- [ ] **SB-065** Run `uv sync --locked`, `ruff check`, formatting checks, full mocked pytest suite, and explicit opt-in live integration tests; fix all actionable failures.
-  - Phase R4 mocks passed (137 passed, one live test skipped by default); the opt-in live test also passed on 2026-10-26 (RM-052). RM-064 is the final rerun.
+- [x] **SB-065** Run `uv sync --locked`, `ruff check`, formatting checks, full mocked pytest suite, and explicit opt-in live integration tests; fix all actionable failures.
+  - Final run on tested code commit `b1ffb35`: locked sync, Ruff lint/format, `uv run pytest -q` (137 passed, 1 live skipped), and `SECOND_BRAIN_LIVE=1 uv run pytest -m live -q` (1 passed). One Starlette/httpx deprecation warning.
 - [x] **SB-066** Reconcile TODO checkboxes against code and verified evidence. Document deferred items and exact blockers. Produce v0.1 release notes.
   - Evidence reconciliation is complete and `docs/RELEASE_NOTES.md` is available. Final verification results are recorded under RM-064.
 
@@ -142,7 +142,7 @@ Populate as work proceeds. Do **not** predeclare success.
 
 | Verification | Result | Evidence (commit/test/log) |
 |---|---|---|
-| Unit/integration test suite | Passed | `uv sync --locked`; Ruff check/format check; `uv run pytest -q`: 35 passed (one Starlette/httpx deprecation warning). |
+| Unit/integration test suite | Passed | Tested code commit `b1ffb35`: `uv sync --locked`, Ruff lint/format checks, `uv run pytest -q`: 137 passed, one opt-in live test skipped (one Starlette/httpx deprecation warning). |
 | SB-018 mocked tool coverage | Passed | R-51 matrix covers modes, profiles, selectors, validation, malformed Ollama responses, and timeouts. |
 | SB-019 MCP Inspector | Passed | 2026-10-26 Inspector CLI verified two tools, schemas, inventory, live ask, and safe invalid-input response. |
 | SB-022/024–026 persistence and continuation | Passed | Transaction rollback, live selector remapping/switching, failure preservation, history ordering, trimming, and rejection tests pass. |
@@ -150,7 +150,7 @@ Populate as work proceeds. Do **not** predeclare success.
 | SB-032–035 local security matrix | Passed | Request limits, principal propagation, auth rotation, Host/Origin, rate-window expiry, request IDs, and log leakage tests pass. |
 | SB-060 hardening regressions | Passed | SQLite lock contention rolls back; malformed MCP JSON, oversized requests/questions, cancellations, timeouts, and model outages are covered. |
 
-| MCP Inspector discovery of both tools | Passed | Inspector `tools/list` returned `ask_second_brain` and `list_models`, schemas, structured outputs, and read-only metadata. |
+| MCP Inspector discovery of both tools | Passed | 2026-10-26 Inspector CLI strict `tools/list`, inventory with `truncated`, live `32k` ask with usage, and safe invalid-input error; see RM-053. |
 | Installed/loaded model inventory and allowlist | Passed | Live MCP `list_models` returned four exact configured tags; private config remains untracked. |
 | No-tools guarantee | Passed | Mock regression asserts `/api/chat` request omits `tools`; direct Ollama conversation succeeded. |
 | SQLite restart persistence | Passed | Live MCP conversation resumed with the same ID and prior `LANTERN-4831` turn after stopping and restarting the server against the same database. |
@@ -158,6 +158,7 @@ Populate as work proceeds. Do **not** predeclare success.
 | Existing Ollama 32K profile | Passed | `qwen35-32k:latest`; live request returned 323, 129 prompt tokens/50 completion tokens, 607 ms in the recorded run. |
 | Codex end-to-end | Passed | Live profile listing and two `ask_second_brain` calls returned `23 × 17 = 391`; follow-up used the same ID. Restart persistence independently passed. |
 | Claude Code end-to-end | Passed | Live profile listing and two `ask_second_brain` calls returned `23 × 17 = 391`; follow-up used the same ID. Restart persistence independently passed. |
+| Opt-in live MCP/Ollama suite | Passed | `SECOND_BRAIN_LIVE=1 uv run pytest -m live -q`: 1 passed, including inventory, ask, continuation, restart persistence, cross-principal denial, enums, and safe errors. |
 | ChatGPT end-to-end | Blocked | No authenticated remote endpoint or ChatGPT workspace access is available; do not expose local loopback service. |
 | Remote auth/security tests | Not run | Requires a selected OAuth/tunnel design and reachable remote test endpoint. |
 | 4K/128K/256K profile checks | Passed | Live short calls: 4k `qwen3.5:9b` 2.742 s; 128k `qwen35-128k:latest` 3.978 s; 256k `qwen35-256k:latest` 4.716 s. `ollama ps` showed 256k loaded at 262144 context, 7% CPU / 93% GPU. |
@@ -165,9 +166,7 @@ Populate as work proceeds. Do **not** predeclare success.
 ### Remaining release blockers
 
 - An authorized ChatGPT workspace and remote test endpoint are needed before SB-041–046 and SB-054 can be completed. This requirement is independent of Ralph Bridge.
-- Remaining concurrency and retention integration coverage is still needed (SB-028).
 - A booted Ubuntu systemd host is required to demonstrate the service lifecycle (SB-062).
-- The remaining adversarial security regression cases remain to be exercised (SB-035, SB-060).
 
 ## Reference documentation
 

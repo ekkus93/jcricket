@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation TODO
 
-**Status:** In progress — Phases R0–R4 complete; reconciliation and release remain
+**Status:** Complete — Phases R0–R5 passed; external ChatGPT and systemd lifecycle blockers remain documented
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_SPEC.md](REMEDIATION_SPEC.md) (requirements `R-xx`), [SPEC.md](SPEC.md)  
 **Related:** [TODO.md](TODO.md) (original v0.1 items `SB-xxx`)
@@ -150,12 +150,13 @@
 - [x] **RM-060** Apply the `SPEC.md` changes from REMEDIATION_SPEC §12 (the Ralph Bridge row only if RM-006 chose option (b)).
   - Applied error-code, inventory truncation, continuation selection, transactional persistence, admin export/retention, trusted-host, single-process, and request-ID guidance. The owner-approved Ralph Bridge removal was already recorded under RM-006.
 - [x] **RM-061** Re-evaluate SB-018, SB-019, SB-022, SB-024–SB-026, SB-028, SB-032–SB-035, SB-060, and SB-065 in `docs/TODO.md` against their original wording and the new evidence; check only items that fully pass; add evidence rows to the verification record. Do not change requirement text.
-  - Re-evaluated requirements without changing their wording. SB-018/019, 022, 024–026, 028, 032–035, and 060 now pass; SB-065 awaits the RM-064 final rerun. Evidence rows were added to `docs/TODO.md`.
+  - Re-evaluated requirements without changing their wording. SB-018/019, 022, 024–026, 028, 032–035, 060, and 065 now pass after the RM-064 final rerun. Evidence rows were added to `docs/TODO.md`.
 - [x] **RM-062** Write `docs/RELEASE_NOTES.md` for v0.1 with features, known limitations (4k usable input, single process, local auth only), external blockers (ChatGPT, systemd lifecycle), and the verification summary (R-05).
   - Added `docs/RELEASE_NOTES.md` with the current feature set, limitations, blockers, and phase verification evidence.
 - [x] **RM-063** Check SB-066 only after RM-061 and RM-062 are complete.
   - SB-066 was checked after the evidence reconciliation and release notes were complete; final verification is tracked by RM-064.
-- [ ] **RM-064** Final full check: `uv sync --locked`, Ruff check, Ruff format check, `uv run pytest` (mocked), and `SECOND_BRAIN_LIVE=1 uv run pytest -m live` (live). Record the commit hash and results.
+- [x] **RM-064** Final full check: `uv sync --locked`, Ruff check, Ruff format check, `uv run pytest` (mocked), and `SECOND_BRAIN_LIVE=1 uv run pytest -m live` (live). Record the commit hash and results.
+  - Passed on tested code commit `b1ffb35`: locked sync, Ruff check, Ruff format check, `uv run pytest -q` (137 passed, 1 live skipped), and `SECOND_BRAIN_LIVE=1 uv run pytest -m live -q` (1 passed). One Starlette/httpx deprecation warning remains.
 
 **Gate R5:** Every review finding is closed or explicitly deferred with an owner-approved note; `TODO.md` checkboxes match the original requirements and recorded evidence.
 
@@ -209,4 +210,4 @@ Populate as work proceeds. Do **not** predeclare success.
 | Phase R4 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 137 passed, 1 live test skipped by default, one Starlette/httpx deprecation warning. Opt-in live test passed; MCP Inspector CLI validation is recorded under RM-053. |
 | Opt-in live suite (RM-052) | Passed | 2026-10-26, `SECOND_BRAIN_LIVE=1 uv run pytest -m live -q`: 1 passed against local Ollama, with temporary server restart and continuation. |
 | MCP Inspector re-check (RM-053) | Passed | 2026-10-26, Inspector CLI: strict tool listing, inventory, live ask, and safe invalid-input response. |
-| Final full check (RM-064) | Not run | — |
+| Final full check (RM-064) | Passed | Tested code commit `b1ffb35`; `uv sync --locked`, Ruff lint/format checks, mocked pytest (137 passed, 1 live skipped), and live pytest (1 passed). One Starlette/httpx deprecation warning. |
