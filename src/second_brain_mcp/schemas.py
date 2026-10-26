@@ -42,3 +42,4 @@ class ModelInfo(OutputModel):
 class ModelInventory(OutputModel):
     models: list[ModelInfo]
     default_profile: str
+    truncated: bool

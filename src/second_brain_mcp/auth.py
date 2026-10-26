@@ -11,6 +11,8 @@ from urllib.parse import urlsplit
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from .errors import SecondBrainError
+
 _current_principal: ContextVar[str | None] = ContextVar(
     "second_brain_principal", default=None
 )
@@ -19,7 +21,7 @@ _current_principal: ContextVar[str | None] = ContextVar(
 def current_principal() -> str:
     principal = _current_principal.get()
     if not principal:
-        raise PermissionError("authenticated principal required")
+        raise SecondBrainError("unauthorized")
     return principal
 
 
@@ -34,7 +36,9 @@ class LocalAuthMiddleware:
         requests_per_minute: int = 60,
     ) -> None:
         self.app = app
-        self.credentials = credentials
+        self.credentials = {
+            principal: token.encode("utf-8") for principal, token in credentials.items()
+        }
         self.allowed_hosts = {host, "127.0.0.1", "localhost", "[::1]"}
         self.requests_per_minute = requests_per_minute
         self._requests: dict[str, deque[float]] = defaultdict(deque)
@@ -70,14 +74,20 @@ class LocalAuthMiddleware:
             return
         auth = headers.get("authorization", "")
         scheme, _, token = auth.partition(" ")
-        if scheme.lower() != "bearer" or not token:
+        if (
+            scheme.lower() != "bearer"
+            or not token
+            or not token.isascii()
+            or any(ord(char) < 33 or ord(char) > 126 for char in token)
+        ):
             await _json(send, 401, b'{"error":"authentication required"}')
             return
+        presented = token.encode("latin-1")
         principal = next(
             (
                 name
                 for name, expected in self.credentials.items()
-                if hmac.compare_digest(token, expected)
+                if hmac.compare_digest(presented, expected)
             ),
             None,
         )

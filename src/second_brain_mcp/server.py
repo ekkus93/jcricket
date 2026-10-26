@@ -15,6 +15,7 @@ from starlette.responses import JSONResponse
 
 from .auth import LocalAuthMiddleware, current_principal
 from .config import AppConfig
+from .errors import SecondBrainError
 from .ollama import OllamaClient
 from .schemas import AskResponse, ModelInventory
 from .service import SecondBrainService
@@ -88,9 +89,10 @@ def create_app(config: AppConfig) -> Starlette:
         model: str | None = None,
     ) -> AskResponse:
         request_id = ctx.request_id
-        principal = current_principal()
+        principal = "unknown"
         started = monotonic()
         try:
+            principal = current_principal()
             result = await service.ask(
                 principal,
                 question,
@@ -100,15 +102,25 @@ def create_app(config: AppConfig) -> Starlette:
                 model_profile,
                 model,
             )
-        except (ValueError, RuntimeError) as exc:
-            logger.warning(
+        except SecondBrainError as exc:
+            logger.error(
                 "request_id=%s tool=ask_second_brain principal=%s "
                 "status=error category=%s",
                 request_id,
                 principal,
-                type(exc).__name__,
+                exc.code,
             )
             raise
+        except Exception as exc:
+            logger.debug("unexpected ask_second_brain failure", exc_info=True)
+            logger.error(
+                "request_id=%s tool=ask_second_brain principal=%s "
+                "status=error category=internal_error error_type=%s",
+                request_id,
+                principal,
+                type(exc).__name__,
+            )
+            raise SecondBrainError("internal_error") from exc
         usage = result["usage"]
         logger.info(
             "request_id=%s tool=ask_second_brain principal=%s status=ok "
@@ -125,8 +137,9 @@ def create_app(config: AppConfig) -> Starlette:
 
     @mcp.tool(
         description=(
-            "List installed Ollama models and loaded status. Read-only; does not load, "
-            "pull, run, or modify models."
+            "List up to 200 installed Ollama models and loaded status. Configured "
+            "and approved models are included when the result is truncated. "
+            "Read-only; does not load, pull, run, or modify models."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=True,
@@ -138,18 +151,29 @@ def create_app(config: AppConfig) -> Starlette:
     )
     async def list_models(ctx: Context) -> ModelInventory:
         request_id = ctx.request_id
-        principal = current_principal()
+        principal = "unknown"
         started = monotonic()
         try:
+            principal = current_principal()
             inventory = await ollama.models()
-        except RuntimeError as exc:
-            logger.warning(
+        except SecondBrainError as exc:
+            logger.error(
                 "request_id=%s tool=list_models principal=%s status=error category=%s",
+                request_id,
+                principal,
+                exc.code,
+            )
+            raise
+        except Exception as exc:
+            logger.debug("unexpected list_models failure", exc_info=True)
+            logger.error(
+                "request_id=%s tool=list_models principal=%s "
+                "status=error category=internal_error error_type=%s",
                 request_id,
                 principal,
                 type(exc).__name__,
             )
-            raise
+            raise SecondBrainError("internal_error") from exc
         logger.info(
             "request_id=%s tool=list_models principal=%s status=ok "
             "model_count=%d elapsed_ms=%d",

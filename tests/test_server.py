@@ -1,8 +1,11 @@
+import sqlite3
 from pathlib import Path
 
+import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
+from second_brain_mcp.auth import LocalAuthMiddleware
 from second_brain_mcp.config import AppConfig, Limits, ModelProfile
 from second_brain_mcp.server import create_app
 
@@ -37,6 +40,87 @@ def test_only_two_mcp_tools_and_expected_arguments(tmp_path: Path, monkeypatch) 
         "model_profile",
         "model",
     }
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        sqlite3.OperationalError("private SQL marker"),
+        AttributeError("private parser marker"),
+    ],
+)
+def test_ask_handler_sanitizes_unexpected_exceptions(
+    tmp_path: Path, monkeypatch, exception: Exception
+) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    app = _configured_app(tmp_path)
+
+    async def fail_ask(*args, **kwargs):
+        raise exception
+
+    app.state.service.ask = fail_ask
+    headers = {
+        "Authorization": "Bearer " + "c" * 32,
+        "Host": "127.0.0.1",
+        "Origin": "http://127.0.0.1",
+        "Accept": "application/json, text/event-stream",
+    }
+    with TestClient(app) as client:
+        response = client.post(
+            "/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "ask_second_brain",
+                    "arguments": {"question": "private prompt marker"},
+                },
+            },
+            headers=headers,
+        )
+    result = response.json()["result"]
+    assert result["isError"] is True
+    content = " ".join(part.get("text", "") for part in result["content"])
+    # FastMCP adds its standard tool-name prefix around the handler error.
+    assert content.endswith("internal_error: the server could not complete the request")
+    assert "private SQL marker" not in content
+    assert "private parser marker" not in content
+
+
+def test_list_models_handler_sanitizes_unexpected_exceptions(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    app = _configured_app(tmp_path)
+
+    async def fail_models():
+        raise AttributeError("private inventory marker")
+
+    app.state.ollama.models = fail_models
+    with TestClient(app) as client:
+        response = client.post(
+            "/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "list_models", "arguments": {}},
+            },
+            headers={
+                "Authorization": "Bearer " + "c" * 32,
+                "Host": "127.0.0.1",
+                "Origin": "http://127.0.0.1",
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+    result = response.json()["result"]
+    content = " ".join(part.get("text", "") for part in result["content"])
+    assert result["isError"] is True
+    assert content.endswith("internal_error: the server could not complete the request")
+    assert "private inventory marker" not in content
 
 
 def test_auth_is_required_for_mcp_and_health_is_minimal(
@@ -113,8 +197,76 @@ def test_authentication_maps_separate_tokens_to_principals(
         assert result.json()["result"]["structuredContent"]["default_profile"] == "32k"
 
 
+@pytest.mark.parametrize(
+    "authorization",
+    ["Bearer", "Bearer  " + "c" * 32, b"Bearer caf\xe9"],
+)
+def test_malformed_authorization_headers_return_401(
+    tmp_path: Path, monkeypatch, authorization: str
+) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    with TestClient(_configured_app(tmp_path)) as client:
+        response = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+            headers={
+                "Authorization": authorization,
+                "Host": "127.0.0.1",
+                "Origin": "http://127.0.0.1",
+            },
+        )
+    assert response.status_code == 401
+
+
+def test_bearer_scheme_is_case_insensitive(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    with TestClient(_configured_app(tmp_path)) as client:
+        response = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+            headers={
+                "Authorization": "bearer " + "c" * 32,
+                "Host": "127.0.0.1",
+                "Origin": "http://127.0.0.1",
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.asyncio
+async def test_authorization_token_with_trailing_newline_is_rejected() -> None:
+    async def app(scope, receive, send):
+        pytest.fail("invalid credentials must not reach the app")
+
+    middleware = LocalAuthMiddleware(app, {"codex": "c" * 32}, host="127.0.0.1")
+    messages = []
+    scope = {
+        "type": "http",
+        "path": "/mcp",
+        "headers": [
+            (b"host", b"127.0.0.1"),
+            (b"authorization", b"Bearer " + b"c" * 32 + b"\n"),
+        ],
+    }
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    await middleware(scope, receive, send)
+    response_start = next(
+        item for item in messages if item["type"] == "http.response.start"
+    )
+    assert response_start["status"] == 401
+
+
 async def _fake_models():
-    return {"models": [], "default_profile": "32k"}
+    return {"models": [], "default_profile": "32k", "truncated": False}
 
 
 def test_rejects_untrusted_origin(tmp_path: Path, monkeypatch) -> None:

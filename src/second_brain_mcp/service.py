@@ -1,18 +1,17 @@
-"""Conversation orchestration, context budgeting, and model allowlist enforcement."""
+"""Conversation orchestration, context budgeting, and model allowlisting."""
 
 from __future__ import annotations
 
 import asyncio
+import secrets
+from contextlib import asynccontextmanager
 from typing import Any
 
 from .config import AppConfig
+from .errors import ServiceError
 from .ollama import OllamaClient
 from .prompts import MODE_PROMPTS, system_prompt
-from .store import ConversationStore, Turn
-
-
-class ServiceError(ValueError):
-    """Sanitized caller-facing service error."""
+from .store import ConversationStore, ModelSelection, Turn
 
 
 class SecondBrainService:
@@ -25,7 +24,7 @@ class SecondBrainService:
         self._semaphore = asyncio.Semaphore(config.limits.concurrency)
         self._active = 0
         self._queue_lock = asyncio.Lock()
-        self._conversation_locks: dict[str, asyncio.Lock] = {}
+        self._conversation_locks: dict[str, tuple[asyncio.Lock, int]] = {}
         self._conversation_locks_guard = asyncio.Lock()
 
     async def ask(
@@ -39,115 +38,65 @@ class SecondBrainService:
         model: str | None = None,
     ) -> dict[str, Any]:
         question = question.strip()
-        if not question:
-            raise ServiceError("question must not be empty")
-        if len(question) > self.config.limits.question_chars:
-            raise ServiceError("question exceeds the configured character limit")
-        if context is not None and len(context) > self.config.limits.context_chars:
-            raise ServiceError("context exceeds the configured character limit")
-        if model_profile is not None and not model_profile.strip():
-            raise ServiceError("model_profile must not be empty")
-        if model is not None and not model.strip():
-            raise ServiceError("model must not be empty")
-        if mode not in MODE_PROMPTS:
-            raise ServiceError(
-                "mode must be discuss, brainstorm, critic, review, or solve"
-            )
-        if model and model_profile:
-            raise ServiceError("specify either model or model_profile, not both")
+        self._validate(question, context, conversation_id, mode, model_profile, model)
+        await self._admit()
+        is_new = conversation_id is None
+        locked_id = conversation_id or secrets.token_urlsafe(24)
+        try:
+            async with self._conversation_lock(locked_id):
+                conversation = None if is_new else self.store.get(principal, locked_id)
+                if not is_new and conversation is None:
+                    raise ServiceError("conversation_unavailable")
 
-        conversation = None
-        if conversation_id is not None:
-            conversation = self.store.get(principal, conversation_id)
-            if conversation is None:
-                raise ServiceError("conversation is unavailable")
-
-        if conversation and not model and not model_profile:
-            selected_model = conversation.model_tag
-            profile = conversation.model_profile
-            budget = conversation.context_limit_tokens
-        else:
-            profile = model_profile or (None if model else self.config.default_profile)
-            if profile:
-                selected = self.config.profiles.get(profile)
-                if selected is None:
-                    raise ServiceError("unknown model profile")
-                selected_model, budget = selected.model, selected.context_tokens
-            elif model:
-                budget = self.config.allowed_models.get(model)
-                if budget is None:
-                    raise ServiceError("model is not approved by the server")
-                selected_model = model
-            elif conversation:
-                selected_model, budget, profile = (
-                    conversation.model_tag,
-                    conversation.context_limit_tokens,
-                    conversation.model_profile,
+                selection = self._selection(
+                    conversation, model_profile=model_profile, model=model
                 )
-            else:
-                raise ServiceError("no model is configured")
+                installed = await self.ollama.installed_tags()
+                if selection.model_tag not in installed:
+                    message = (
+                        f'model tag "{selection.model_tag}" is not installed in Ollama'
+                    )
+                    if selection.model_profile:
+                        message = (
+                            f"profile {selection.model_profile} maps to tag "
+                            f'"{selection.model_tag}", which is not installed in Ollama'
+                        )
+                    raise ServiceError("model_not_installed", message)
 
-        inventory = await self.ollama.models()
-        installed = {item["name"] for item in inventory["models"]}
-        if selected_model not in installed:
-            raise ServiceError("selected model is not installed in Ollama")
-
-        is_new_conversation = conversation is None
-        if is_new_conversation:
-            self._build_messages([], question, context, mode, budget)
-            conversation = self.store.create(principal, profile, selected_model, budget)
-        async with await self._conversation_lock(conversation.id):
-            if conversation is not None and (
-                conversation.model_tag,
-                conversation.model_profile,
-                conversation.context_limit_tokens,
-            ) != (selected_model, profile, budget):
-                self.store.update_selection(
-                    conversation.id, profile, selected_model, budget
+                history = [] if is_new else self.store.history(locked_id)
+                messages, trimmed = self._build_messages(
+                    history,
+                    question,
+                    context,
+                    mode,
+                    selection.context_limit_tokens,
                 )
-            history = self.store.history(conversation.id)
-            messages, trimmed = self._build_messages(
-                history, question, context, mode, budget
-            )
-            reserved = False
-            try:
-                async with self._queue_lock:
-                    if (
-                        self._active
-                        >= self.config.limits.concurrency
-                        + self.config.limits.queue_depth
-                    ):
-                        raise ServiceError("server is busy; retry shortly")
-                    self._active += 1
-                    reserved = True
                 async with self._semaphore:
-                    result = await self.ollama.chat(selected_model, messages, budget)
-                self.store.add_turn(
-                    conversation.id,
+                    result = await self.ollama.chat(
+                        selection.model_tag,
+                        messages,
+                        selection.context_limit_tokens,
+                    )
+                stored_id = self.store.record_turn(
+                    principal,
+                    locked_id,
+                    selection,
                     question,
                     context,
                     result.answer,
                     mode,
-                    profile,
-                    selected_model,
-                    budget,
+                    new_conversation=is_new,
                 )
-            except BaseException:
-                if is_new_conversation:
-                    self.store.delete(conversation.id)
-                raise
-            finally:
-                if reserved:
-                    async with self._queue_lock:
-                        self._active -= 1
+        finally:
+            await self._release_admission()
 
         return {
             "answer": result.answer,
-            "conversation_id": conversation.id,
+            "conversation_id": stored_id,
             "mode": mode,
-            "model_profile": profile,
-            "model": selected_model,
-            "context_limit_tokens": budget,
+            "model_profile": selection.model_profile,
+            "model": selection.model_tag,
+            "context_limit_tokens": selection.context_limit_tokens,
             "history_trimmed": trimmed,
             "usage": {
                 "prompt_tokens": result.prompt_tokens,
@@ -155,6 +104,113 @@ class SecondBrainService:
                 "elapsed_ms": result.elapsed_ms,
             },
         }
+
+    def _validate(
+        self,
+        question: str,
+        context: str | None,
+        conversation_id: str | None,
+        mode: str,
+        model_profile: str | None,
+        model: str | None,
+    ) -> None:
+        if not question:
+            raise ServiceError("invalid_input", "question must not be empty")
+        if len(question) > self.config.limits.question_chars:
+            raise ServiceError("invalid_input", "question exceeds the character limit")
+        if context is not None and len(context) > self.config.limits.context_chars:
+            raise ServiceError("invalid_input", "context exceeds the character limit")
+        if conversation_id is not None and not conversation_id.strip():
+            raise ServiceError("invalid_input", "conversation_id must not be empty")
+        if model_profile is not None and not model_profile.strip():
+            raise ServiceError("invalid_input", "model_profile must not be empty")
+        if model is not None and not model.strip():
+            raise ServiceError("invalid_input", "model must not be empty")
+        if mode not in MODE_PROMPTS:
+            raise ServiceError("invalid_input", "mode is not supported")
+        if model is not None and model_profile is not None:
+            raise ServiceError(
+                "invalid_input", "specify either model or model_profile, not both"
+            )
+
+    def _selection(
+        self,
+        conversation,
+        *,
+        model_profile: str | None,
+        model: str | None,
+    ) -> ModelSelection:
+        if model_profile is not None:
+            profile = self.config.profiles.get(model_profile)
+            if profile is None:
+                raise ServiceError("model_not_approved", "unknown model profile")
+            return ModelSelection(model_profile, profile.model, profile.context_tokens)
+        if model is not None:
+            selection = self.config.allowed_models.get(model)
+            if selection is None:
+                raise ServiceError(
+                    "model_not_approved", "model is not approved by the server"
+                )
+            return ModelSelection(None, model, selection.context_tokens)
+        if conversation is None:
+            profile_name = self.config.default_profile
+            profile = self.config.profiles.get(profile_name)
+            if profile is None:
+                raise ServiceError(
+                    "model_not_approved", "no model profile is configured"
+                )
+            return ModelSelection(profile_name, profile.model, profile.context_tokens)
+        if conversation.model_profile is not None:
+            profile = self.config.profiles.get(conversation.model_profile)
+            if profile is None:
+                raise ServiceError(
+                    "model_not_approved",
+                    "this conversation's profile is no longer approved; "
+                    "choose a profile",
+                )
+            return ModelSelection(
+                conversation.model_profile, profile.model, profile.context_tokens
+            )
+        selection = self.config.allowed_models.get(conversation.model_tag)
+        if selection is None:
+            raise ServiceError(
+                "model_not_approved",
+                "this conversation's model is no longer approved; "
+                "choose a model_profile",
+            )
+        return ModelSelection(None, conversation.model_tag, selection.context_tokens)
+
+    async def _admit(self) -> None:
+        async with self._queue_lock:
+            capacity = self.config.limits.concurrency + self.config.limits.queue_depth
+            if self._active >= capacity:
+                raise ServiceError("busy")
+            self._active += 1
+
+    async def _release_admission(self) -> None:
+        async with self._queue_lock:
+            self._active -= 1
+
+    @asynccontextmanager
+    async def _conversation_lock(self, conversation_id: str):
+        async with self._conversation_locks_guard:
+            lock, refs = self._conversation_locks.get(
+                conversation_id, (asyncio.Lock(), 0)
+            )
+            self._conversation_locks[conversation_id] = (lock, refs + 1)
+        try:
+            async with lock:
+                yield
+        finally:
+            async with self._conversation_locks_guard:
+                current_lock, refs = self._conversation_locks[conversation_id]
+                if refs == 1:
+                    del self._conversation_locks[conversation_id]
+                else:
+                    self._conversation_locks[conversation_id] = (
+                        current_lock,
+                        refs - 1,
+                    )
 
     def _build_messages(
         self,
@@ -171,15 +227,19 @@ class SecondBrainService:
         limit = budget - self.config.limits.completion_tokens
         current_size = _token_upper_bound(system) + _token_upper_bound(current_text)
         if current_size > limit:
-            raise ServiceError(
-                "current question and context exceed this model's prompt budget; "
-                "choose a larger profile"
-            )
+            raise ServiceError("context_too_large")
         remaining = limit - current_size
+        pairs: list[tuple[Turn, Turn]] = []
+        index = 0
+        while index < len(history):
+            if history[index].role == "user":
+                if index + 1 < len(history) and history[index + 1].role == "assistant":
+                    pairs.append((history[index], history[index + 1]))
+                    index += 2
+                    continue
+            index += 1
         included: list[Turn] = []
         trimmed = False
-        # Include complete recent user/assistant pairs to keep roles coherent.
-        pairs = [(history[i], history[i + 1]) for i in range(0, len(history) - 1, 2)]
         for user_turn, assistant_turn in reversed(pairs):
             user_text = user_turn.content
             if user_turn.context_text:
@@ -189,10 +249,10 @@ class SecondBrainService:
             )
             if pair_cost > remaining:
                 trimmed = True
-                break
+                continue
             included[0:0] = [user_turn, assistant_turn]
             remaining -= pair_cost
-        if len(included) < len(history):
+        if len(included) != len(history):
             trimmed = True
         messages = [{"role": "system", "content": system}]
         for turn in included:
@@ -203,11 +263,6 @@ class SecondBrainService:
         messages.append({"role": "user", "content": current_text})
         return messages, trimmed
 
-    async def _conversation_lock(self, conversation_id: str) -> asyncio.Lock:
-        async with self._conversation_locks_guard:
-            return self._conversation_locks.setdefault(conversation_id, asyncio.Lock())
-
 
 def _token_upper_bound(text: str) -> int:
-    # UTF-8 byte count is conservative for tokenizers that can emit byte-level tokens.
     return len(text.encode("utf-8"))

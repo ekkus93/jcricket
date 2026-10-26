@@ -4,12 +4,22 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
+
+from .prompts import MODE_PROMPTS, system_prompt
 
 
 class StrictModel(BaseModel):
@@ -19,6 +29,12 @@ class StrictModel(BaseModel):
 class ModelProfile(StrictModel):
     model: str = Field(min_length=1)
     context_tokens: int = Field(gt=0, le=262_144)
+    completion_tokens: int | None = Field(default=None, gt=0)
+
+
+class AllowedModel(StrictModel):
+    context_tokens: int = Field(gt=0, le=262_144)
+    completion_tokens: int | None = Field(default=None, gt=0)
 
 
 class Limits(StrictModel):
@@ -32,6 +48,7 @@ class Limits(StrictModel):
     request_timeout_seconds: float = Field(default=300, gt=0, le=3600)
     connect_timeout_seconds: float = Field(default=5, gt=0, le=120)
     requests_per_minute: int = Field(default=60, gt=0, le=10_000)
+    inventory_cache_seconds: int = Field(default=10, ge=0, le=300)
 
 
 class AppConfig(StrictModel):
@@ -41,7 +58,7 @@ class AppConfig(StrictModel):
     port: int = Field(default=8000, ge=1, le=65535)
     default_profile: str = "32k"
     profiles: dict[str, ModelProfile]
-    allowed_models: dict[str, int] = Field(default_factory=dict)
+    allowed_models: dict[str, AllowedModel] = Field(default_factory=dict)
     limits: Limits = Field(default_factory=Limits)
     token_env: dict[str, str] = Field(default_factory=dict)
     log_level: str = "INFO"
@@ -74,15 +91,19 @@ class AppConfig(StrictModel):
             raise ValueError("profile context token budgets must match their names")
         return value
 
-    @field_validator("allowed_models")
+    @field_validator("allowed_models", mode="before")
     @classmethod
-    def validate_allowed_models(cls, value: dict[str, int]) -> dict[str, int]:
-        if any(
-            not name.strip() or budget <= 0 or budget > 262_144
-            for name, budget in value.items()
-        ):
-            raise ValueError("allowed model tags and context budgets must be valid")
-        return value
+    def validate_allowed_models_input(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            raise ValueError("allowed_models must be a mapping")
+        normalized = {}
+        for name, budget in value.items():
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("allowed model tags and context budgets must be valid")
+            normalized[name] = (
+                {"context_tokens": budget} if type(budget) is int else budget
+            )
+        return normalized
 
     @field_validator("default_profile")
     @classmethod
@@ -90,6 +111,58 @@ class AppConfig(StrictModel):
         if value not in {"4k", "32k", "128k", "256k"}:
             raise ValueError("default_profile must be one of 4k, 32k, 128k, 256k")
         return value
+
+    @field_validator("log_level")
+    @classmethod
+    def valid_log_level(cls, value: str) -> str:
+        normalized = value.upper()
+        if normalized not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            raise ValueError(
+                "log_level must be DEBUG, INFO, WARNING, ERROR, or CRITICAL"
+            )
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_effective_budgets(self) -> AppConfig:
+        profile_tags: dict[str, int] = {}
+        for name, profile in self.profiles.items():
+            completion = profile.completion_tokens or self.limits.completion_tokens
+            _validate_budget(
+                profile.context_tokens,
+                completion,
+                f"profile {name}",
+            )
+            previous = profile_tags.setdefault(profile.model, profile.context_tokens)
+            if previous != profile.context_tokens:
+                raise ValueError(
+                    f"model tag {profile.model!r} has conflicting profile budgets; "
+                    "select it through one profile"
+                )
+        for tag, selection in self.allowed_models.items():
+            completion = selection.completion_tokens or self.limits.completion_tokens
+            _validate_budget(selection.context_tokens, completion, f"model {tag}")
+            profile_budget = profile_tags.get(tag)
+            if (
+                profile_budget is not None
+                and profile_budget != selection.context_tokens
+            ):
+                raise ValueError(
+                    f"model tag {tag!r} has a different allowed-model budget; "
+                    "select it through its profile instead"
+                )
+        selectable = set(profile_tags) | set(self.allowed_models)
+        if len(selectable) > 200:
+            raise ValueError(
+                "no more than 200 distinct selectable model tags are allowed"
+            )
+        for principal, env_name in self.token_env.items():
+            if not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", principal):
+                raise ValueError(
+                    "token_env principal names must be lowercase identifiers"
+                )
+            if not re.fullmatch(r"[A-Z_][A-Z0-9_]*", env_name):
+                raise ValueError("token_env values must be environment variable names")
+        return self
 
     @field_validator("ollama_base_url")
     @classmethod
@@ -136,9 +209,33 @@ class AppConfig(StrictModel):
                 "bearer tokens must contain at least 32 characters for principals: "
                 + ", ".join(weak)
             )
+        malformed = [
+            principal
+            for principal, token in credentials.items()
+            if not token.isascii()
+            or any(ord(char) < 33 or ord(char) > 126 for char in token)
+        ]
+        if malformed:
+            raise ValueError(
+                "bearer tokens must contain printable ASCII for principals: "
+                + ", ".join(malformed)
+            )
         if len(set(credentials.values())) != len(credentials):
             raise ValueError("each configured principal must use a distinct token")
         return credentials
+
+
+def _validate_budget(context_tokens: int, completion_tokens: int, name: str) -> None:
+    if completion_tokens >= context_tokens:
+        raise ValueError(f"{name} completion_tokens must be less than context_tokens")
+    longest_prompt = max(
+        len(system_prompt(mode).encode("utf-8")) for mode in MODE_PROMPTS
+    )
+    if context_tokens - completion_tokens < longest_prompt + 256:
+        raise ValueError(
+            f"{name} leaves too little prompt budget after completion reserve; "
+            "leave room for the system prompt and at least 256 input tokens"
+        )
 
 
 def load_config(path: Path) -> AppConfig:

@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
 from .config import AppConfig
+from .errors import OllamaError
 
-
-class OllamaError(RuntimeError):
-    """Sanitized error raised for unavailable or invalid Ollama responses."""
+MAX_LISTED_MODELS = 200
 
 
 @dataclass(frozen=True)
@@ -36,6 +36,9 @@ class OllamaClient:
             base_url=config.ollama_base_url, timeout=timeout
         )
         self._owns_client = client is None
+        self._installed_tags_cache: set[str] | None = None
+        self._installed_tags_expires = 0.0
+        self._installed_tags_lock = asyncio.Lock()
 
     async def close(self) -> None:
         if self._owns_client:
@@ -62,10 +65,10 @@ class OllamaClient:
             payload = response.json()
             answer = payload.get("message", {}).get("content")
             if not isinstance(answer, str) or not answer.strip():
-                raise OllamaError("Ollama returned an invalid chat response")
+                raise OllamaError("ollama_bad_response")
             answer = answer.strip()
             if len(answer.encode("utf-8")) > self.config.limits.response_bytes:
-                raise OllamaError("Ollama response exceeded the configured size limit")
+                raise OllamaError("ollama_bad_response")
             return ChatResult(
                 answer=answer,
                 prompt_tokens=_optional_int(payload.get("prompt_eval_count")),
@@ -73,11 +76,11 @@ class OllamaClient:
                 elapsed_ms=_duration_ms(payload),
             )
         except httpx.TimeoutException as exc:
-            raise OllamaError("Ollama request timed out") from exc
+            raise OllamaError("ollama_timeout") from exc
         except httpx.HTTPError as exc:
-            raise OllamaError("Ollama is unavailable or rejected the request") from exc
+            raise OllamaError("ollama_unavailable") from exc
         except (ValueError, TypeError, AttributeError) as exc:
-            raise OllamaError("Ollama returned malformed data") from exc
+            raise OllamaError("ollama_bad_response") from exc
 
     async def models(self) -> dict[str, Any]:
         try:
@@ -86,58 +89,151 @@ class OllamaClient:
             )
             tags_response.raise_for_status()
             ps_response.raise_for_status()
-            tags = tags_response.json().get("models", [])
-            running = ps_response.json().get("models", [])
+            tags_payload = tags_response.json()
+            running_payload = ps_response.json()
+            if not isinstance(tags_payload, dict) or not isinstance(
+                running_payload, dict
+            ):
+                raise OllamaError("ollama_bad_response")
+            tags = tags_payload.get("models")
+            running = running_payload.get("models")
             if not isinstance(tags, list) or not isinstance(running, list):
-                raise OllamaError("Ollama returned malformed model inventory")
+                raise OllamaError("ollama_bad_response")
         except httpx.TimeoutException as exc:
-            raise OllamaError("Ollama model discovery timed out") from exc
+            raise OllamaError("ollama_timeout") from exc
         except httpx.HTTPError as exc:
-            raise OllamaError("Ollama model discovery is unavailable") from exc
+            raise OllamaError("ollama_unavailable") from exc
         except (ValueError, TypeError, AttributeError) as exc:
-            raise OllamaError("Ollama returned malformed model inventory") from exc
+            raise OllamaError("ollama_bad_response") from exc
 
-        running_by_name = {
-            item.get("name"): item
-            for item in running
-            if isinstance(item, dict) and isinstance(item.get("name"), str)
-        }
+        running_by_name = {}
+        for item in running:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            running_by_name[name] = item
         profiles_by_model: dict[str, list[tuple[str, int]]] = {}
         for profile_name, profile in self.config.profiles.items():
             profiles_by_model.setdefault(profile.model, []).append(
                 (profile_name, profile.context_tokens)
             )
         results = []
-        for item in tags[:200]:
-            if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+        seen: set[str] = set()
+        for item in tags:
+            if not isinstance(item, dict):
                 continue
-            name = item["name"]
+            name = item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            if name in seen:
+                continue
+            seen.add(name)
+            details = item.get("details")
+            if not isinstance(details, dict):
+                details = {}
             loaded = running_by_name.get(name)
             profiles = profiles_by_model.get(name, [])
-            direct_budget = self.config.allowed_models.get(name)
+            direct_selection = self.config.allowed_models.get(name)
             results.append(
                 {
                     "name": name,
-                    "parameter_size": item.get("details", {}).get("parameter_size"),
-                    "quantization": item.get("details", {}).get("quantization_level"),
-                    "installed_size_bytes": item.get("size"),
+                    "parameter_size": _optional_str(details.get("parameter_size")),
+                    "quantization": _optional_str(details.get("quantization_level")),
+                    "installed_size_bytes": _optional_nonnegative_int(item.get("size")),
                     "loaded": loaded is not None,
-                    "loaded_context_tokens": loaded.get("context_length")
+                    "loaded_context_tokens": _optional_nonnegative_int(
+                        loaded.get("context_length")
+                    )
                     if loaded
                     else None,
-                    "loaded_vram_bytes": loaded.get("size_vram") if loaded else None,
-                    "selectable": bool(profiles or direct_budget),
+                    "loaded_vram_bytes": _optional_nonnegative_int(
+                        loaded.get("size_vram")
+                    )
+                    if loaded
+                    else None,
+                    "selectable": bool(profiles or direct_selection),
                     "profiles": [profile_name for profile_name, _ in profiles],
                     "configured_context_limit_tokens": (
-                        max((budget for _, budget in profiles), default=direct_budget)
+                        max(
+                            (budget for _, budget in profiles),
+                            default=(
+                                direct_selection.context_tokens
+                                if direct_selection
+                                else None
+                            ),
+                        )
                     ),
                 }
             )
-        return {"models": results, "default_profile": self.config.default_profile}
+        required_names = list(
+            dict.fromkeys(
+                [profile.model for profile in self.config.profiles.values()]
+                + list(self.config.allowed_models)
+            )
+        )
+        by_name = {item["name"]: item for item in results}
+        required = [by_name[name] for name in required_names if name in by_name]
+        required_set = {item["name"] for item in required}
+        remaining = [item for item in results if item["name"] not in required_set]
+        bounded = (required + remaining)[:MAX_LISTED_MODELS]
+        return {
+            "models": bounded,
+            "default_profile": self.config.default_profile,
+            "truncated": len(results) > len(bounded),
+        }
+
+    async def installed_tags(self) -> set[str]:
+        """Return the complete installed-tag set, sharing short-lived lookups."""
+        ttl = self.config.limits.inventory_cache_seconds
+        if ttl == 0:
+            return await self._fetch_installed_tags()
+        async with self._installed_tags_lock:
+            now = time.monotonic()
+            if (
+                self._installed_tags_cache is not None
+                and now < self._installed_tags_expires
+            ):
+                return set(self._installed_tags_cache)
+            tags = await self._fetch_installed_tags()
+            self._installed_tags_cache = tags
+            self._installed_tags_expires = time.monotonic() + ttl
+            return set(tags)
+
+    async def _fetch_installed_tags(self) -> set[str]:
+        try:
+            response = await self._client.get("/api/tags")
+            response.raise_for_status()
+            payload = response.json()
+            models = payload.get("models") if isinstance(payload, dict) else None
+            if not isinstance(models, list):
+                raise OllamaError("ollama_bad_response")
+            return {
+                item["name"]
+                for item in models
+                if isinstance(item, dict)
+                and isinstance(item.get("name"), str)
+                and item["name"].strip()
+            }
+        except httpx.TimeoutException as exc:
+            raise OllamaError("ollama_timeout") from exc
+        except httpx.HTTPError as exc:
+            raise OllamaError("ollama_unavailable") from exc
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise OllamaError("ollama_bad_response") from exc
 
 
 def _optional_int(value: Any) -> int | None:
-    return value if isinstance(value, int) and value >= 0 else None
+    return _optional_nonnegative_int(value)
+
+
+def _optional_nonnegative_int(value: Any) -> int | None:
+    return value if type(value) is int and value >= 0 else None
+
+
+def _optional_str(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
 
 
 def _duration_ms(payload: dict[str, Any]) -> int | None:

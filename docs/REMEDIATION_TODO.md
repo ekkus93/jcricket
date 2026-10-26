@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation TODO
 
-**Status:** In progress — Phase R0 baseline and TODO integrity work complete; remediation phases remain
+**Status:** In progress — Phases R0 and R1 complete; remediation phases remain
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_SPEC.md](REMEDIATION_SPEC.md) (requirements `R-xx`), [SPEC.md](SPEC.md)  
 **Related:** [TODO.md](TODO.md) (original v0.1 items `SB-xxx`)
@@ -41,52 +41,52 @@
 
 ### Model selection
 
-- [ ] **RM-010** Introduce the error hierarchy: `SecondBrainError` with a `code` attribute and fixed messages for every code in R-20; make `ServiceError` and `OllamaError` subclasses or replace them; all raised errors render as `<code>: <message>` (R-20).
+- [x] **RM-010** Introduce the error hierarchy: `SecondBrainError` with a `code` attribute and fixed messages for every code in R-20; make `ServiceError` and `OllamaError` subclasses or replace them; all raised errors render as `<code>: <message>` (R-20).
   - Test: every code has a fixed message string, and each existing failure path raises the expected code.
-- [ ] **RM-011** Re-validate the stored selection on continuation per the R-10 table: profile conversations follow the current profile mapping; direct-model conversations require the tag to still be in `allowed_models` with its current budget; anything else gives `model_not_approved` (R-10, R-11). Depends on RM-010.
+- [x] **RM-011** Re-validate the stored selection on continuation per the R-10 table: profile conversations follow the current profile mapping; direct-model conversations require the tag to still be in `allowed_models` with its current budget; anything else gives `model_not_approved` (R-10, R-11). Depends on RM-010.
   - Test: revoked direct model blocks continuation; remapped profile tag is used and persisted after success; budget change takes effect; explicit profile or model on continuation validated like a new conversation.
-- [ ] **RM-012** Add `ConversationStore.record_turn(...)` that, in one `BEGIN IMMEDIATE` transaction, inserts the conversation row (new conversations), or verifies existence and ownership (existing ones), updates the selection and `updated_at`, and inserts the user/assistant pair (R-12, R-23).
+- [x] **RM-012** Add `ConversationStore.record_turn(...)` that, in one `BEGIN IMMEDIATE` transaction, inserts the conversation row (new conversations), or verifies existence and ownership (existing ones), updates the selection and `updated_at`, and inserts the user/assistant pair (R-12, R-23).
   - Test: ownership mismatch and missing row both roll back and raise `conversation_unavailable`; no partial rows remain after an injected failure between statements.
-- [ ] **RM-013** Rewrite `SecondBrainService.ask` to generate new IDs before inference, insert nothing until `record_turn`, and remove `create`-then-`delete` and pre-inference `update_selection` (R-12, R-23). Depends on RM-012.
+- [x] **RM-013** Rewrite `SecondBrainService.ask` to generate new IDs before inference, insert nothing until `record_turn`, and remove `create`-then-`delete` and pre-inference `update_selection` (R-12, R-23). Depends on RM-012.
   - Test: for Ollama timeout, Ollama error, busy rejection, cancellation, and oversized input, the conversation row (if any) is unchanged and no new conversation row exists.
   - Test: deleting a conversation through the store while its ask is in flight gives `conversation_unavailable` and no orphan messages.
-- [ ] **RM-014** Perform the authoritative conversation read (selection and history) inside the per-conversation lock (R-24). Depends on RM-013.
+- [x] **RM-014** Perform the authoritative conversation read (selection and history) inside the per-conversation lock (R-24). Depends on RM-013.
   - Test: two concurrent asks, one switching profile, the other with no selector; the second, which acquires the lock later, uses the switched selection.
 
 ### Ollama adapter and inventory
 
-- [ ] **RM-015** Move all `/api/tags` and `/api/ps` parsing inside error handling; apply R-16's field-level type rules; never let `ModelInventory` validation fail (R-16).
+- [x] **RM-015** Move all `/api/tags` and `/api/ps` parsing inside error handling; apply R-16's field-level type rules; never let `ModelInventory` validation fail (R-16).
   - Test: parametrized cases from R-16's acceptance list, including `details: null` (the reproduced `AttributeError`).
-- [ ] **RM-016** Add an installed-tags lookup that uses only `/api/tags`, has no truncation, uses a TTL cache (`limits.inventory_cache_seconds`, default 10, `0` disables) shared by concurrent callers, and never caches failures. Use it on the ask path instead of `models()` (R-13).
+- [x] **RM-016** Add an installed-tags lookup that uses only `/api/tags`, has no truncation, uses a TTL cache (`limits.inventory_cache_seconds`, default 10, `0` disables) shared by concurrent callers, and never caches failures. Use it on the ask path instead of `models()` (R-13).
   - Test: a model in position 250 of `/api/tags` is accepted; two concurrent asks cause one `/api/tags` fetch; `/api/ps` is never called on the ask path; a failed fetch is retried on the next call.
-- [ ] **RM-017** `model_not_installed` names the profile (if any) and the tag (R-13).
+- [x] **RM-017** `model_not_installed` names the profile (if any) and the tag (R-13).
   - Test: missing `32k` tag yields a message containing `32k` and the tag.
-- [ ] **RM-018** `list_models`: `MAX_LISTED_MODELS = 200` constant; always include configured and allowlisted tags; add `truncated: bool` to `ModelInventory`; mention the cap in the tool description (R-15).
+- [x] **RM-018** `list_models`: `MAX_LISTED_MODELS = 200` constant; always include configured and allowlisted tags; add `truncated: bool` to `ModelInventory`; mention the cap in the tool description (R-15).
   - Test: 300 installed tags, with a configured tag at position 280, return 200 entries including that tag and `truncated: true`; 5 tags return `truncated: false`.
 
 ### Error sanitization and auth
 
-- [ ] **RM-019** In both tool handlers, re-raise `SecondBrainError`, convert every other `Exception` to `internal_error`, log the type and request ID at `ERROR` and details only at `DEBUG`, and never catch `CancelledError` (R-21). Depends on RM-010.
-  - Test: injected `sqlite3.OperationalError` and `AttributeError` produce exactly the `internal_error` text in the MCP response; the original message is absent from the response.
-- [ ] **RM-020** Compare credentials as bytes; non-printable-ASCII or malformed tokens get 401; `credentials()` rejects non-ASCII configured tokens (R-22).
+- [x] **RM-019** In both tool handlers, re-raise `SecondBrainError`, convert every other `Exception` to `internal_error`, log the type and request ID at `ERROR` and details only at `DEBUG`, and never catch `CancelledError` (R-21). Depends on RM-010.
+  - Verified: MCP returns the fixed `internal_error` text without the original exception. The installed FastMCP SDK adds its standard `Error executing tool <name>:` prefix around raised tool errors; the regression test checks the canonical error suffix and no raw detail.
+- [x] **RM-020** Compare credentials as bytes; non-printable-ASCII or malformed tokens get 401; `credentials()` rejects non-ASCII configured tokens (R-22).
   - Test: R-22's cases, including raw byte `0xE9` (the reproduced 500), never return 500.
 
 ### Concurrency and persistence
 
-- [ ] **RM-021** Reference-count per-conversation locks and remove them when unused (R-25).
+- [x] **RM-021** Reference-count per-conversation locks and remove them when unused (R-25).
   - Test: after 50 asks on distinct conversations, plus a cancelled ask, the lock registry is empty.
-- [ ] **RM-022** Move admission control to the start of `ask`, after cheap validation, so it covers inventory fetch, lock wait, and inference; release in `finally` (R-26).
+- [x] **RM-022** Move admission control to the start of `ask`, after cheap validation, so it covers inventory fetch, lock wait, and inference; release in `finally` (R-26).
   - Test: with `concurrency=1, queue_depth=0`, a second ask while the first is blocked in Ollama gets `busy`, makes no Ollama call, and writes nothing; with `queue_depth=1`, it waits and succeeds.
-- [ ] **RM-023** Close every SQLite connection deterministically through a store helper (R-27).
+- [x] **RM-023** Close every SQLite connection deterministically through a store helper (R-27).
   - Test: count `connect` and `close` across every store method; they are equal.
-- [ ] **RM-024** Make migrations transactional and idempotent, using `PRAGMA table_info` checks (R-28).
+- [x] **RM-024** Make migrations transactional and idempotent, using `PRAGMA table_info` checks (R-28).
   - Test: clean v1, partially migrated v1, and an injected mid-migration failure (left at v1 with no new columns).
-- [ ] **RM-025** Pair history by walking user→assistant turns, skipping unpaired rows (R-32).
+- [x] **RM-025** Pair history by walking user→assistant turns, skipping unpaired rows (R-32).
   - Test: history with a stray unpaired `user` row still builds coherent messages.
 
 ### Configuration validation
 
-- [ ] **RM-026** Validate `log_level`, budget versus reserve plus minimum input, `completion_tokens < context_tokens`, conflicting budgets for one tag, `token_env` name formats, and `inventory_cache_seconds` range (R-35).
+- [x] **RM-026** Validate `log_level`, budget versus reserve plus minimum input, `completion_tokens < context_tokens`, conflicting budgets for one tag, `token_env` name formats, and `inventory_cache_seconds` range (R-35).
   - Test: one failing config per rule, each with a specific error message; `check-config` reports each.
   - Test: `allowed_models: {x: 1024}` with the default reserve is rejected at load (the reproduced bug 7).
 
@@ -198,7 +198,7 @@ Populate as work proceeds. Do **not** predeclare success.
 |---|---|---|
 | Fresh-clone install, lint, and tests (RM-003) | Passed | Local fresh clone at baseline commit `80ac1102b25128905731505ce167f96050b8b524`; `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 35 passed, one Starlette/httpx deprecation warning. No Ollama/network service was needed. |
 | Phase R0 checks | Passed | After TODO integrity edits: `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest`: 35 passed, one Starlette/httpx deprecation warning. |
-| Bug regression tests, all twelve (Gate R1) | Not run | — |
+| Phase R1 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 95 passed, one Starlette/httpx deprecation warning. MCP SDK error wrapper behavior is documented under RM-019. |
 | Log leakage test (RM-036) | Not run | — |
 | Full R-51 mocked coverage (RM-051) | Not run | — |
 | Opt-in live suite (RM-052) | Not run | — |
