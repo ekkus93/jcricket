@@ -292,3 +292,5 @@ All of the following pass on the final commit, and are recorded with the commit 
 | `scripts/check_todo_integrity.py` (subprocess only) | failure paths and measurement | TC-01, TC-62 |
 | `scripts/init_credentials.py:22-49`, `:58`, `:65-70` | create over existing file, rotate missing file | TC-63, TC-81 |
 | `scripts/init_credentials.py:106`, `:113-116`, `:128` | staging failure cleanup, restore on failure | TC-01 measurement first; add tests if still uncovered |
+
+**Erratum (2026-10-26):** the row for `ollama.py:350→322` above describes that branch as the context-window loop "continuing after a not-installed tag". It is actually the duplicate-warning branch (a second selection whose tag already produced the same "does not pin num_ctx" warning). The not-installed case is covered by `test_context_window_check_continues_after_missing_tag`; the duplicate-warning branch by `test_context_window_warning_is_reported_once_per_tag`. The original row is left unchanged for traceability.

@@ -80,8 +80,9 @@
 
 ## Phase E — Documentation (P1)
 
-- [ ] **RM3-025** Add the `Erratum (2026-10-26):` line under `docs/TEST_COVERAGE_SPEC.md` §10 for `ollama.py:350→322`; document `metadata_timeout_seconds` in `docs/operations.md` and `config.example.yaml` (R3-25, R3-12).
+- [x] **RM3-025** Add the `Erratum (2026-10-26):` line under `docs/TEST_COVERAGE_SPEC.md` §10 for `ollama.py:350→322`; document `metadata_timeout_seconds` in `docs/operations.md` and `config.example.yaml` (R3-25, R3-12).
   - Acceptance: the original §10 row is unchanged; the erratum names the branch as the duplicate-warning branch; `config.example.yaml` contains `metadata_timeout_seconds: 10` under `limits`.
+  - Evidence: `docs/TEST_COVERAGE_SPEC.md` ends with an `Erratum (2026-10-26):` paragraph naming `ollama.py:350→322` as the duplicate-warning branch and pointing to its two tests; `git diff` shows the original row at line 276 untouched. `docs/operations.md` documents `limits.metadata_timeout_seconds` (default 10 s, max 120 s) in the model-variants section. `config.example.yaml` already contains `metadata_timeout_seconds: 10` under `limits` (added with RM3-012).
 
 ## Phase F — Test runtime (P1)
 

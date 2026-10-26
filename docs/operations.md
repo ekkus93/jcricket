@@ -14,6 +14,8 @@ Each profile needs its own model tag whose real context window is at least the p
 - a tag that does not pin `num_ctx` gets a warning, because its real window then depends on whether the model honors the request and on Ollama's default context length (`OLLAMA_CONTEXT_LENGTH`);
 - if Ollama cannot be reached, `check-config` fails, while `serve` prints a warning and starts anyway.
 
+This check uses its own timeout, `limits.metadata_timeout_seconds` (default 10 s, maximum 120 s), together with `limits.connect_timeout_seconds`, so a slow `/api/show` never waits for the 300 s inference timeout (`limits.request_timeout_seconds`). The check makes one request per configured tag.
+
 ## Ubuntu service
 
 The example unit is `deploy/second-brain.service.example`. Install the project and locked environment under `/opt/second-brain`, put runtime configuration in `/etc/second-brain/config.yaml`, and create `/etc/second-brain/credentials.env` with only the service's principal tokens. Set the credential file to `root:second-brain`, mode `0640`, and keep the configuration readable by the service account. Create `/var/lib/second-brain` owned by `second-brain` with mode `0700`; set `database_path` in the service config to `/var/lib/second-brain/conversations.sqlite3`. Review the unit paths and permissions, then install it as `/etc/systemd/system/second-brain.service` and run `systemctl daemon-reload`, `systemctl enable --now second-brain`, and `systemctl status second-brain`. Logs are available with `journalctl -u second-brain`.
