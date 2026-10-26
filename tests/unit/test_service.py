@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 import httpx
@@ -980,3 +981,87 @@ async def test_context_too_large_names_profile_budget(
     )
     with pytest.raises(ServiceError, match="the 4k prompt budget"):
         await service.ask("codex", "x" * 5000, model_profile="4k")
+
+
+def _blocking_ollama(
+    app_config: Any, release: asyncio.Event, started: asyncio.Event
+) -> httpx.AsyncClient:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags":
+            return httpx.Response(
+                200, json={"models": [{"name": app_config.profiles["32k"].model}]}
+            )
+        if request.url.path == "/api/chat":
+            started.set()
+            if not release.is_set():
+                await release.wait()
+            await asyncio.sleep(0)
+            return httpx.Response(200, json={"message": {"content": "answer"}})
+        return httpx.Response(404)
+
+    return httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama.test"
+    )
+
+
+@pytest.mark.asyncio
+async def test_lock_registry_is_empty_after_many_asks_and_a_cancelled_ask(
+    app_config: Any,
+) -> None:
+    release = asyncio.Event()
+    release.set()
+    started = asyncio.Event()
+    async with _blocking_ollama(app_config, release, started) as http:
+        service = SecondBrainService(
+            app_config,
+            OllamaClient(app_config, http),
+            ConversationStore(app_config.database_path),
+        )
+        for index in range(50):
+            await service.ask("codex", f"question {index}")
+        release.clear()
+        started.clear()
+        task = asyncio.create_task(service.ask("codex", "cancel me"))
+        await started.wait()
+        assert len(service._conversation_locks) == 1
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    assert service._conversation_locks == {}
+
+
+@pytest.mark.asyncio
+async def test_lock_registry_is_empty_after_cancelled_waiter(app_config: Any) -> None:
+    release = asyncio.Event()
+    release.set()
+    started = asyncio.Event()
+    async with _blocking_ollama(app_config, release, started) as http:
+        service = SecondBrainService(
+            app_config,
+            OllamaClient(app_config, http),
+            ConversationStore(app_config.database_path),
+        )
+        first = await service.ask("codex", "start")
+        conversation_id = first["conversation_id"]
+        release.clear()
+        started.clear()
+        holder = asyncio.create_task(
+            service.ask("codex", "holder", conversation_id=conversation_id)
+        )
+        await started.wait()
+        waiter = asyncio.create_task(
+            service.ask("codex", "waiter", conversation_id=conversation_id)
+        )
+        for _ in range(20):
+            await asyncio.sleep(0)
+            if service._conversation_locks.get(conversation_id, (None, 0))[1] == 2:
+                break
+        assert service._conversation_locks[conversation_id][1] == 2
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter
+        release.set()
+        result = await holder
+    assert result["conversation_id"] == conversation_id
+    assert service._conversation_locks == {}
+    assert service._active == 0

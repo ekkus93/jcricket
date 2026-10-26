@@ -129,8 +129,10 @@
   - Test: no question, context, or token marker appears in captured server output; the test runs under plain pytest without Ollama in under 30 seconds.
   - Evidence: `tests/integration/test_access_log_leakage.py` starts `second_brain_mcp.cli serve` (real uvicorn, `log_level: DEBUG`, Ollama pointed at closed port 9), sends unauthenticated, invalid-token, valid, and query-string requests, and checks the captured stdout/stderr (45 lines including uvicorn access lines) contains no `QUESTIONMARKER`, `CONTEXTMARKER`, or `TOKENMARKER`. Runs in about 0.5 s; full suite 191 passed, 1 skipped.
   - Note: uvicorn's access log does record query strings (`POST /mcp?note=QUERYMARKER`). The server never reads credentials or prompts from the query string, so nothing sensitive is logged through normal use.
-- [ ] **RM2-024** Add the cancelled-ask lock-cleanup cases (R2-14).
+- [x] **RM2-024** Add the cancelled-ask lock-cleanup cases (R2-14).
   - Test: after 50 asks plus one cancelled mid-inference ask, the lock registry is empty; with two asks contending for one conversation and the waiter cancelled, the registry is empty after the holder completes.
+  - Evidence: `test_lock_registry_is_empty_after_many_asks_and_a_cancelled_ask` (50 asks, then one ask cancelled while blocked in `/api/chat`; registry held 1 lock mid-inference and is empty after) and `test_lock_registry_is_empty_after_cancelled_waiter` (holder blocked in Ollama, waiter on the same conversation lock with refcount 2, waiter cancelled, holder completes; registry empty and admission count 0). Both pass; full suite 193 passed, 1 skipped.
+  - Note: these are coverage additions for already-correct code, not a bug fix, so there is no fail-first evidence.
 - [ ] **RM2-025** Replace suffix and `endswith` error checks in server and live tests with exact-equality checks (R2-30). Depends on RM2-010.
   - Acceptance: `grep -rn "endswith(\"invalid_input\|endswith('invalid_input" tests` finds nothing; the live test compares the full error text.
 
