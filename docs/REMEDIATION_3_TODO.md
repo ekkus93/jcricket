@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation Round 3 TODO
 
-**Status:** Not started  
+**Status:** All tasks implemented and verified (2026-10-26) except two that are deliberately left UNCHECKED pending the owner: RM3-010 (its acceptance clause "all existing trimming tests pass unchanged" conflicts with R3-10 itself, because `test_history_pairing_skips_unpaired_rows` asserted the buggy `history_trimmed: true`; I changed that one assertion) and RM3-011 (its clause "`--fail-under=99.5` exits 2" cannot hold because the total, 99.47%, rounds to 99.5%; the intended behavior is verified with 99.6). RM3-030's "exactly one subprocess test for `second_brain_mcp.cli`" was read as excluding the access-log leakage test, which the same task says to leave unchanged. The runtime median (9.55 s) has little headroom under the 10 s limit.  
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_3_SPEC.md](REMEDIATION_3_SPEC.md) (requirements `R3-xx`)  
 **Related:** [TEST_COVERAGE_TODO.md](TEST_COVERAGE_TODO.md), [REMEDIATION_2_TODO.md](REMEDIATION_2_TODO.md)
@@ -98,8 +98,9 @@
 
 ## Phase G — Final verification (P0)
 
-- [ ] **RM3-040** Run every R3-40 check on the final commit, including the fresh clone and the three timed pytest runs, and record each with the commit hash (R3-40).
+- [x] **RM3-040** Run every R3-40 check on the final commit, including the fresh clone and the three timed pytest runs, and record each with the commit hash (R3-40).
   - Acceptance: every R3-40 item is recorded with date, command, and result; the Status line names any remaining exception.
+  - Evidence: all R3-40 checks ran on 2026-10-26 against tested code commit `392e262` (later commits change only documentation); results are in the verification record below. The Status line names the two exceptions (RM3-010, RM3-011).
 
 **Gate G:** All findings from the third review are closed with evidence; the coverage gate holds at one decimal; the suite runs in ≤ 10 s.
 
@@ -125,9 +126,9 @@ Populate as work proceeds. Do **not** predeclare success.
 
 | Verification | Result | Evidence (commit/command/output) |
 |---|---|---|
-| Integrity protection for this file (RM3-001) | Not run | — |
-| Fail-first evidence, Phase B (RM3-010 to RM3-012) | Not run | — |
-| Phase checks (sync, Ruff, pytest, coverage) | Not run | — |
-| Runtime after conversion, three runs (RM3-030) | Not run | — |
-| Fresh clone of final commit (RM3-040) | Not run | — |
-| Final verification (RM3-040) | Not run | — |
+| Integrity protection for this file (RM3-001) | Passed | 2026-10-26, `10428a8`: baseline `3205580` added; a temporary edit to RM3-010's first `Test:` line made the checker exit 1; reverting restored a pass. |
+| Fail-first evidence, Phase B (RM3-010 to RM3-012) | Passed | RM3-010: `test_orphan_assistant_row_is_left_out_of_the_prompt` and `test_only_orphan_rows_do_not_set_history_trimmed` failed with `assert True is False` before the fix (`deb5497`). RM3-011: `should_fail_under(98.6, 99, 0)` printed `False` before the change (`8ccbbfd`). RM3-012: `test_context_window_check_builds_client_with_metadata_timeout` failed (missing field) before the change; the 300 s read timeout was reproduced separately (`292a3af`). RM3-023 and RM3-024 also have fail-first evidence (`d04c4cb`). |
+| Phase checks (sync, Ruff, pytest, coverage) | Passed | 2026-10-26, after each phase: Ruff check and format clean; pytest 280 → 283 (B) → 283 (C) → 287 (D) → 289 (F), always 1 skipped (opt-in live); coverage gate (99.4, one decimal) passing throughout. A dip to 99.41% after RM3-023 was restored to 99.47% by `8cdb201`. |
+| Runtime after conversion, three runs (RM3-030) | Passed | `392e262`: 8.45 / 8.38 / 8.50 s wall right after the conversion (median 8.45 s); 8.46 / 9.55 / 10.99 s in the final verification (median 9.55 s). Before the conversion: 10.26 / 10.36 / 10.31 s. |
+| Fresh clone of final commit (RM3-040) | Passed | 2026-10-26: `git clone` of `392e262` into the scratchpad; `uv sync --locked`, Ruff check and format, pytest (289 passed, 1 skipped), the coverage command (exit 0, 99.59%), and the integrity checker all passed. The clone's first pytest run took 11.2 s (cold bytecode and a fresh environment), which is outside the three-run median measurement. |
+| Final verification (RM3-040) | Passed | 2026-10-26, `392e262`: `uv sync --locked`; `uv run ruff check .`; `uv run ruff format --check .`; `uv run pytest -q` three times (289 passed, 1 skipped, 1 Starlette/httpx deprecation warning; wall 8.46 / 9.55 / 10.99 s, **median 9.55 s ≤ 10 s**, with one run over and about 0.45 s of headroom on the median); coverage command exit 0 at `fail_under = 99.4`, `precision = 1`, total 99.59%; integrity checker passed. |
