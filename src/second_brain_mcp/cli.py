@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import sys
 from pathlib import Path
 from typing import Any
 
-from .config import load_config
+from .config import AppConfig, load_config
+from .errors import SecondBrainError
+from .ollama import verify_context_windows
 from .store import ConversationStore
 
 
@@ -48,6 +51,8 @@ def main() -> None:
     except ValueError as exc:
         print(f"second-brain: {exc}", file=sys.stderr)
         raise SystemExit(1) from None
+    if args.command in {"check-config", "serve"}:
+        _verify_context_windows(config, required=args.command == "check-config")
     if args.command == "check-config":
         print("Configuration is valid.")
     elif args.command == "conversations":
@@ -56,6 +61,25 @@ def main() -> None:
         from .server import run
 
         run(config)
+
+
+def _verify_context_windows(config: AppConfig, *, required: bool) -> None:
+    """Fail on budgets larger than a model's real window; warn when unverifiable."""
+    try:
+        report = asyncio.run(verify_context_windows(config))
+    except SecondBrainError as exc:
+        message = f"could not verify model context windows: {exc}"
+        if required:
+            print(f"second-brain: {message}", file=sys.stderr)
+            raise SystemExit(1) from None
+        print(f"second-brain: warning: {message}", file=sys.stderr)
+        return
+    for warning in report.warnings:
+        print(f"second-brain: warning: {warning}", file=sys.stderr)
+    for error in report.errors:
+        print(f"second-brain: {error}", file=sys.stderr)
+    if report.errors:
+        raise SystemExit(1)
 
 
 def _conversations(config: Any, args: argparse.Namespace) -> None:

@@ -5,7 +5,7 @@ from typing import Any
 import httpx
 import pytest
 
-from second_brain_mcp.ollama import OllamaClient, OllamaError
+from second_brain_mcp.ollama import OllamaClient, OllamaError, verify_context_windows
 from second_brain_mcp.schemas import ModelInventory
 
 
@@ -281,3 +281,110 @@ async def test_installed_tag_cache_does_not_cache_failures(app_config: Any) -> N
             await client.installed_tags()
         assert await client.installed_tags() == {"qwen:32k"}
     assert calls == 2
+
+
+def _show_client(shows: dict[str, dict | None]) -> httpx.AsyncClient:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path != "/api/show" or request.method != "POST":
+            return httpx.Response(404)
+        model = json.loads(await request.aread())["model"]
+        body = shows.get(model)
+        if body is None:
+            return httpx.Response(404, json={"error": "model not found"})
+        return httpx.Response(200, json=body)
+
+    return httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama.test"
+    )
+
+
+def _show(num_ctx: int | None = None, native: int | None = 262144) -> dict:
+    parameters = "temperature                    1"
+    if num_ctx is not None:
+        parameters = f"num_ctx                        {num_ctx}\n" + parameters
+    model_info = {} if native is None else {"qwen35.context_length": native}
+    return {"parameters": parameters, "model_info": model_info}
+
+
+def _pinned_shows(app_config: Any) -> dict[str, dict | None]:
+    return {
+        profile.model: _show(profile.context_tokens)
+        for profile in app_config.profiles.values()
+    } | {"other:tag": _show(8192)}
+
+
+@pytest.mark.asyncio
+async def test_context_windows_pass_when_pinned_windows_match(app_config: Any) -> None:
+    async with _show_client(_pinned_shows(app_config)) as http:
+        report = await verify_context_windows(app_config, http)
+    assert report.errors == []
+    assert report.warnings == []
+
+
+@pytest.mark.asyncio
+async def test_pinned_window_smaller_than_budget_fails(app_config: Any) -> None:
+    shows = _pinned_shows(app_config)
+    shows["qwen:128k"] = _show(32768)
+    async with _show_client(shows) as http:
+        report = await verify_context_windows(app_config, http)
+    assert report.errors == [
+        "profile 128k budget 131072 exceeds the 32768-token context window pinned "
+        'by tag "qwen:128k"; use a variant built with num_ctx >= 131072'
+    ]
+
+
+@pytest.mark.asyncio
+async def test_unpinned_window_warns_or_fails_against_native_length(
+    app_config: Any,
+) -> None:
+    shows = _pinned_shows(app_config)
+    shows["qwen:4k"] = _show(None, native=262144)
+    shows["qwen:256k"] = _show(None, native=131072)
+    async with _show_client(shows) as http:
+        report = await verify_context_windows(app_config, http)
+    assert report.warnings == [
+        'tag "qwen:4k" does not pin num_ctx; if the model ignores request num_ctx, '
+        "its window is Ollama's default context length, which may be smaller "
+        "than 4096"
+    ]
+    assert report.errors == [
+        "profile 256k budget 262144 exceeds the native 131072-token context "
+        'length of tag "qwen:256k"'
+    ]
+
+
+@pytest.mark.asyncio
+async def test_missing_profile_and_allowed_tags_fail(app_config: Any) -> None:
+    shows = _pinned_shows(app_config)
+    shows["qwen:32k"] = None
+    shows["other:tag"] = None
+    async with _show_client(shows) as http:
+        report = await verify_context_windows(app_config, http)
+    assert report.errors == [
+        'profile 32k maps to tag "qwen:32k", which is not installed in Ollama',
+        'allowed model "other:tag" is not installed in Ollama',
+    ]
+
+
+@pytest.mark.asyncio
+async def test_allowed_model_budget_is_checked_like_profiles(app_config: Any) -> None:
+    shows = _pinned_shows(app_config)
+    shows["other:tag"] = _show(4096)
+    async with _show_client(shows) as http:
+        report = await verify_context_windows(app_config, http)
+    assert report.errors == [
+        'allowed model "other:tag" budget 8192 exceeds the 4096-token context '
+        'window pinned by tag "other:tag"; use a variant built with num_ctx >= 8192'
+    ]
+
+
+@pytest.mark.asyncio
+async def test_context_window_check_reports_unreachable_ollama(app_config: Any) -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama.test"
+    ) as http:
+        with pytest.raises(OllamaError, match="^ollama_unavailable:"):
+            await verify_context_windows(app_config, http)

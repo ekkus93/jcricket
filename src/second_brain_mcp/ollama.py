@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -213,6 +214,45 @@ class OllamaClient:
             "truncated": len(results) > len(bounded),
         }
 
+    async def show(self, model: str) -> tuple[int | None, int | None] | None:
+        """Return ``(pinned num_ctx, native context length)``, or None if absent.
+
+        Uses the read-only ``/api/show`` endpoint; it never loads the model.
+        """
+        try:
+            response = await self._client.post("/api/show", json={"model": model})
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise OllamaError("ollama_bad_response")
+            parameters = payload.get("parameters")
+            match = (
+                re.search(r"^num_ctx\s+(\d+)\s*$", parameters, re.MULTILINE)
+                if isinstance(parameters, str)
+                else None
+            )
+            model_info = payload.get("model_info")
+            native = None
+            if isinstance(model_info, dict):
+                native = next(
+                    (
+                        value
+                        for key, value in model_info.items()
+                        if key.endswith(".context_length")
+                        and _optional_nonnegative_int(value)
+                    ),
+                    None,
+                )
+            return (int(match[1]) if match else None, native)
+        except httpx.TimeoutException as exc:
+            raise OllamaError("ollama_timeout") from exc
+        except httpx.HTTPError as exc:
+            raise OllamaError("ollama_unavailable") from exc
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise OllamaError("ollama_bad_response") from exc
+
     async def installed_tags(self) -> set[str]:
         """Return the complete installed-tag set, sharing short-lived lookups."""
         ttl = self.config.limits.inventory_cache_seconds
@@ -251,6 +291,67 @@ class OllamaClient:
             raise OllamaError("ollama_unavailable") from exc
         except (ValueError, TypeError, AttributeError) as exc:
             raise OllamaError("ollama_bad_response") from exc
+
+
+@dataclass(frozen=True)
+class ContextWindowReport:
+    errors: list[str]
+    warnings: list[str]
+
+
+async def verify_context_windows(
+    config: AppConfig, client: httpx.AsyncClient | None = None
+) -> ContextWindowReport:
+    """Check every configured budget against the model's real context window.
+
+    Some models ignore the request's ``num_ctx``, so a budget larger than the
+    window pinned by the model variant would be silently truncated by Ollama.
+    Raises ``OllamaError`` when Ollama cannot be queried.
+    """
+    ollama = OllamaClient(config, client)
+    selections = [
+        (f"profile {name}", profile.model, profile.context_tokens)
+        for name, profile in config.profiles.items()
+    ] + [
+        (f'allowed model "{tag}"', tag, selection.context_tokens)
+        for tag, selection in config.allowed_models.items()
+    ]
+    errors: list[str] = []
+    warnings: list[str] = []
+    try:
+        for label, tag, budget in selections:
+            info = await ollama.show(tag)
+            if info is None:
+                errors.append(
+                    f'{label} maps to tag "{tag}", which is not installed in Ollama'
+                    if label.startswith("profile ")
+                    else f"{label} is not installed in Ollama"
+                )
+                continue
+            pinned, native = info
+            if pinned is not None:
+                if budget > pinned:
+                    errors.append(
+                        f"{label} budget {budget} exceeds the {pinned}-token context "
+                        f'window pinned by tag "{tag}"; use a variant built with '
+                        f"num_ctx >= {budget}"
+                    )
+            elif native is not None and budget > native:
+                errors.append(
+                    f"{label} budget {budget} exceeds the native {native}-token "
+                    f'context length of tag "{tag}"'
+                )
+            else:
+                warning = (
+                    f'tag "{tag}" does not pin num_ctx; if the model ignores request '
+                    "num_ctx, its window is Ollama's default context length, which "
+                    f"may be smaller than {budget}"
+                )
+                if warning not in warnings:
+                    warnings.append(warning)
+    finally:
+        await ollama.close()
+    return ContextWindowReport(errors, warnings)
 
 
 def _optional_int(value: Any) -> int | None:

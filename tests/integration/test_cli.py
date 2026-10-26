@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from second_brain_mcp.cli import _conversations
+from second_brain_mcp.cli import _conversations, _verify_context_windows
 from second_brain_mcp.config import AppConfig, ModelProfile
 from second_brain_mcp.store import ConversationStore, ModelSelection
 
@@ -253,3 +253,50 @@ def test_check_config_reports_errors_without_traceback(
     assert result.returncode == 1
     assert message in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def _unreachable_config(tmp_path: Path) -> AppConfig:
+    return _config(tmp_path / "db.sqlite3").model_copy(
+        update={"ollama_base_url": "http://127.0.0.1:9"}
+    )
+
+
+def test_check_config_fails_when_context_windows_cannot_be_verified(
+    tmp_path: Path, capsys
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        _verify_context_windows(_unreachable_config(tmp_path), required=True)
+    assert exc_info.value.code == 1
+    assert capsys.readouterr().err == (
+        "second-brain: could not verify model context windows: "
+        "ollama_unavailable: Ollama is unavailable or rejected the request\n"
+    )
+
+
+def test_serve_warns_and_continues_when_context_windows_cannot_be_verified(
+    tmp_path: Path, capsys
+) -> None:
+    _verify_context_windows(_unreachable_config(tmp_path), required=False)
+    assert capsys.readouterr().err == (
+        "second-brain: warning: could not verify model context windows: "
+        "ollama_unavailable: Ollama is unavailable or rejected the request\n"
+    )
+
+
+def test_context_window_errors_and_warnings_are_reported(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    from second_brain_mcp.ollama import ContextWindowReport
+
+    async def report(config):
+        return ContextWindowReport(["first error", "second error"], ["a warning"])
+
+    monkeypatch.setattr("second_brain_mcp.cli.verify_context_windows", report)
+    with pytest.raises(SystemExit) as exc_info:
+        _verify_context_windows(_config(tmp_path / "db.sqlite3"), required=False)
+    assert exc_info.value.code == 1
+    assert capsys.readouterr().err == (
+        "second-brain: warning: a warning\n"
+        "second-brain: first error\n"
+        "second-brain: second error\n"
+    )

@@ -83,7 +83,7 @@ The first release optimizes for simplicity, private operation, predictable tool 
 
 - **MCP layer:** MCP Python SDK (FastMCP or supported equivalent) via Streamable HTTP; input validation, stable tool schema, structured output when client-compatible.
 - **Application layer:** principal-based routing, behavior-mode prompt construction, token/context budgeting, request handling, cancellation and errors.
-- **Ollama adapter:** HTTP client (`httpx`) to the existing local Ollama service, typically `http://127.0.0.1:11434`; `/api/chat` for inference, read-only `/api/tags` for installed models and `/api/ps` for loaded-model status. No management endpoints.
+- **Ollama adapter:** HTTP client (`httpx`) to the existing local Ollama service, typically `http://127.0.0.1:11434`; `/api/chat` for inference, read-only `/api/tags` for installed models and `/api/ps` for loaded-model status, and read-only `POST /api/show` only for the startup and `check-config` context-window check (§5). No management endpoints.
 - **Conversation store:** SQLite using the standard library initially; WAL mode, schema migrations, backups, retention/erase commands.
 - **Deployment layer:** loopback-only server behind a trusted HTTPS reverse proxy, supported MCP tunnel, or equivalent protected ingress. Direct unauthenticated Ollama exposure is prohibited.
 
@@ -137,7 +137,7 @@ The server—not the caller—determines the authenticated principal. **Do not a
 
 **Input:** None (an empty JSON object). Every call requires the same authenticated MCP principal as `ask_second_brain`.
 
-**Backend:** Fetch `GET /api/tags` for the installed model inventory and `GET /api/ps` for currently loaded models. Correlate by exact model tag and annotate with server-side configuration. Do not infer a model's maximum context window solely from its name or `/api/tags`. The running `context_length` value reflects a loaded model's current allocation, not a guarantee about the model's native capabilities. Handle an empty inventory and Ollama unavailability clearly.
+**Backend:** Fetch `GET /api/tags` for the installed model inventory and `GET /api/ps` for currently loaded models. `list_models` does not call `/api/show`; that endpoint is used only by the startup and `check-config` context-window check (§5). Correlate by exact model tag and annotate with server-side configuration. Do not infer a model's maximum context window solely from its name or `/api/tags`. The running `context_length` value reflects a loaded model's current allocation, not a guarantee about the model's native capabilities. Handle an empty inventory and Ollama unavailability clearly.
 
 Return at most `MAX_LISTED_MODELS = 200` entries and include `truncated: boolean`. When the inventory is truncated, keep all configured and approved model tags in the result.
 
@@ -205,6 +205,8 @@ ollama:
 ```
 
 These model tags are **placeholders**, not actual installed names. Startup and `list_models` use `GET /api/tags` to discover installed tags, with optional `GET /api/ps` to report runtime status; configured tags absent from the inventory must fail with a useful explanation when selected. An approved model is one referenced by a configured profile or explicitly listed in `allowed_models` with an administrator-set context budget. `ask_second_brain(model=...)` accepts exact approved tags only, never an arbitrary user-supplied installed name. Supplying both `model_profile` and `model` is invalid; when both are omitted on a new discussion, default to `32k`. On every continuation, resolve a stored profile through the current profile mapping and require a stored direct model to remain approved with its current budget. An optional per-profile or per-model `completion_tokens` reserve overrides the global reserve. Respect existing per-model Ollama configuration; set `options.num_ctx` only where necessary, consistent with the selected profile, and verify the effective allocation. A configured context size is an **upper bound**, not evidence that answer quality or inference speed remains constant at that length.
+
+**Context-window check.** Some models ignore the request's `options.num_ctx`; their window is fixed by the model variant (for example, a Modelfile `PARAMETER num_ctx`). Each profile therefore needs its own model tag, and no tag may be mapped by two profiles. `second-brain check-config` and `second-brain serve` call read-only `POST /api/show` for every profile and allowed-model tag. A budget larger than the tag's pinned `num_ctx`, or (with no pinned value) larger than its native `model_info` context length, is an error, as is a tag that is not installed. A tag that does not pin `num_ctx` produces a warning, because its real window then depends on whether the model honors the request and on Ollama's default context length. If Ollama cannot be queried, `check-config` fails while `serve` warns and starts.
 
 Chat requests use `POST /api/chat` with `model`, `messages`, `stream: false`, and supported options/keep-alive. **Do not include a `tools` field**. For `list_models`, make only read-only inventory/status calls. Do not expose arbitrary Ollama endpoints or accept unapproved arbitrary model names.
 
