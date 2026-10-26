@@ -45,7 +45,7 @@ A failed tool call returns `isError: true` with one text item that is exactly `<
 |---|---|
 | `invalid_input` | Empty or over-long question or context, empty selector, both `model` and `model_profile`, an argument outside its schema (`invalid value for <field>`), or an unknown tool. |
 | `conversation_unavailable` | Unknown conversation ID, an ID owned by another principal (indistinguishable from unknown), or a conversation deleted while its turn was running. |
-| `model_not_approved` | Unknown profile, a model not in `allowed_models`, or a conversation whose stored selection is no longer approved. |
+| `model_not_approved` | Unknown profile or a conversation whose stored profile is no longer configured. |
 | `model_not_installed` | The selected tag is not in Ollama's `/api/tags`; the message names the profile and tag. |
 | `context_too_large` | The current question and context exceed the selection's prompt budget; the message gives the available bytes and suggests a larger profile when one fits. |
 | `busy` | `concurrency + queue_depth` requests are already admitted. |
@@ -77,7 +77,7 @@ Configuration lives in `[tool.coverage.*]` in `pyproject.toml`. The gate is `fai
 
 - `401`: check that the client uses its matching principal helper and the server has the same token; rotate credentials with `scripts/init_credentials.py --rotate` (add `--service-file` when systemd uses the service file, so both are rotated together, all-or-nothing, with a private `.bak` of the previous contents), restart the service, and reconnect clients. For principals other than `codex` and `claude-code`, run the helper with `--env-var NAME`.
 - `403`: confirm loopback Host/Origin policy and that requests use the configured local URL.
-- Missing model/profile: compare exact configured tags with `ollama list`; check loaded models with `ollama ps`.
+- Missing model/profile: check the exact tag with `ollama list`; direct model selection accepts any installed tag. Check loaded models with `ollama ps`.
 - Timeout or queue-full response: verify Ollama is responsive and lower inference concurrency; large context profiles can take longer and consume more memory.
 - MCP Inspector prompts for OAuth: Inspector defaults to OAuth; for this local bearer-token server, pass an Authorization header using a private local test setup.
 

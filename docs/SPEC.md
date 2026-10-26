@@ -104,7 +104,7 @@ Recommended dependencies: Python 3.12+, `uv`, maintained MCP Python SDK, `httpx`
 | `conversation_id` | string | No | Opaque ID returned by an earlier call. Omit to create a new conversation. |
 | `mode` | enum | No | `discuss` (default), `brainstorm`, `critic`, `review`, `solve`. |
 | `model_profile` | enum | No | `4k`, `32k` (default on new discussions), `128k`, `256k`. On continuation, use the conversation's existing selection unless explicitly changed. |
-| `model` | string | No | Exact installed Ollama model tag, as returned by `list_models`; only selectable if configured in the server allowlist. Cannot be supplied together with `model_profile`. On continuation, an explicit model changes the conversation's selected model. |
+| `model` | string | No | Exact installed Ollama model tag, as returned by `list_models`; any currently installed tag can be selected. Uses that tag's profile budget when mapped to a profile, otherwise the default profile budget (or an optional `allowed_models` budget override). Cannot be supplied together with `model_profile`. On continuation, an explicit model changes the conversation's selected model. |
 
 The server—not the caller—determines the authenticated principal. **Do not accept `client_id`, `owner`, or namespace as a security authority from tool arguments.**
 
@@ -163,9 +163,9 @@ Return at most `MAX_LISTED_MODELS = 200` entries and include `truncated: boolean
 }
 ```
 
-Fields absent from Ollama's response should be returned as `null` rather than invented; unloaded models have `loaded: false` and `loaded_context_tokens: null`. `selectable` means the model's exact tag is present in the administrator-maintained allowlist, not merely installed. Return all locally installed model names only to authenticated callers, bounded to a documented maximum response size; do not expose local filesystem paths, model files, digests, tokens, or internal service URLs. No arguments grant elevated model-management rights.
+Fields absent from Ollama's response should be returned as `null` rather than invented; unloaded models have `loaded: false` and `loaded_context_tokens: null`. Every installed model is selectable by its exact tag. `profiles` identifies tags with a named profile; `configured_context_limit_tokens` reports the matching profile or explicit `allowed_models` budget, falling back to the default profile budget for other installed models. Return all locally installed model names only to authenticated callers, bounded to a documented maximum response size; do not expose local filesystem paths, model files, digests, tokens, or internal service URLs. No arguments grant elevated model-management rights.
 
-If a tag is installed but `selectable: false`, an administrator must explicitly allow it before `ask_second_brain(model=...)` can invoke it. This avoids allowing a remote MCP caller to load arbitrary heavyweight or sensitive models.
+The `ask_second_brain(model=...)` selector accepts only an exact tag from the current Ollama inventory; it cannot pull or load arbitrary tags. Callers can select any installed model. Administrators may set an `allowed_models` entry to choose a per-model context/completion budget; otherwise the default profile budget applies. Large models may consume substantial memory and inference time, so operators should control the Ollama inventory and authenticated MCP access.
 
 ### 4.3 Modes
 
@@ -204,7 +204,7 @@ ollama:
   allowed_models: {}
 ```
 
-These model tags are **placeholders**, not actual installed names. Startup and `list_models` use `GET /api/tags` to discover installed tags, with optional `GET /api/ps` to report runtime status; configured tags absent from the inventory must fail with a useful explanation when selected. An approved model is one referenced by a configured profile or explicitly listed in `allowed_models` with an administrator-set context budget. `ask_second_brain(model=...)` accepts exact approved tags only, never an arbitrary user-supplied installed name. Supplying both `model_profile` and `model` is invalid; when both are omitted on a new discussion, default to `32k`. On every continuation, resolve a stored profile through the current profile mapping and require a stored direct model to remain approved with its current budget. An optional per-profile or per-model `completion_tokens` reserve overrides the global reserve. Respect existing per-model Ollama configuration; set `options.num_ctx` only where necessary, consistent with the selected profile, and verify the effective allocation. A configured context size is an **upper bound**, not evidence that answer quality or inference speed remains constant at that length.
+These profile tags are **placeholders**, not actual installed names. Startup and `list_models` use `GET /api/tags` to discover installed tags, with optional `GET /api/ps` to report runtime status; tags absent from the inventory fail with a useful explanation when selected. Any exact installed tag is valid for `ask_second_brain(model=...)`; the server does not accept an arbitrary non-installed name or pull models. Supplying both `model_profile` and `model` is invalid; when both are omitted on a new discussion, default to `32k`. Profiles set their mapped model and context budget. Direct model selection uses the matching profile budget when available, otherwise the default profile budget; an optional `allowed_models` entry overrides this with an administrator-set budget. On continuation, stored direct selections remain usable while their exact tag is installed. An optional per-profile or per-model `completion_tokens` reserve overrides the global reserve. Respect existing per-model Ollama configuration; set `options.num_ctx` only where necessary, consistent with the selected budget, and verify the effective allocation. A configured context size is an **upper bound**, not evidence that answer quality or inference speed remains constant at that length.
 
 **Context-window check.** Some models ignore the request's `options.num_ctx`; their window is fixed by the model variant (for example, a Modelfile `PARAMETER num_ctx`). Each profile therefore needs its own model tag, and no tag may be mapped by two profiles. `second-brain check-config` and `second-brain serve` call read-only `POST /api/show` for every profile and allowed-model tag. A budget larger than the tag's pinned `num_ctx`, or (with no pinned value) larger than its native `model_info` context length, is an error, as is a tag that is not installed. A tag that does not pin `num_ctx` produces a warning, because its real window then depends on whether the model honors the request and on Ollama's default context length. If Ollama cannot be queried, `check-config` fails while `serve` warns and starts.
 
@@ -301,7 +301,7 @@ ChatGPT custom MCP connectivity is a **product/workspace capability**, separate 
 
 - No anonymous access to real tools or conversation records. Fail closed on authentication errors.
 - Bind principal identity **only** from verified credentials, not `context`, `question`, headers blindly trusted from the internet, or client-supplied JSON arguments.
-- Restrict model names to configured allowlists; sanitize paths, IDs, logs, and error messages.
+- Restrict caller-selected model names to exact installed Ollama tags; do not expose model management or arbitrary Ollama endpoints. Sanitize paths, IDs, logs, and error messages.
 - Limit request size, question/context length, context tokens, response tokens, concurrency, request rate, and queue depth.
 - Treat text supplied to Ollama and text returned by Ollama as **untrusted**. Never execute embedded instructions or silently relay model-suggested tool calls to an agent runtime.
 - Do not persist raw model thinking, request authorization headers, access tokens, full prompts in default telemetry, or secrets.
@@ -377,7 +377,7 @@ This is a starting structure, not an obligation to create unnecessary files. Kee
 
 ### 10.3 Definition of done for v0.1
 
-A single maintained Python codebase serves both MCP tools; model inventory and loaded status are available read-only; the tool-free Ollama call works on the existing installation; modes, all configured profiles, and optionally approved direct models are selectable; persisted discussions survive restart; authenticated principals are isolated; Codex and Claude Code have passing live smoke tests; the remote endpoint is safely deployed; and ChatGPT has either a **passing real invocation test** or a clearly marked **external account/connector blocker**. All tests, security checks, docs, and administrator controls are complete.
+A single maintained Python codebase serves both MCP tools; model inventory and loaded status are available read-only; the tool-free Ollama call works on the existing installation; modes, all configured profiles, and any currently installed exact-tag model are selectable; persisted discussions survive restart; authenticated principals are isolated; Codex and Claude Code have passing live smoke tests; the remote endpoint is safely deployed; and ChatGPT has either a **passing real invocation test** or a clearly marked **external account/connector blocker**. All tests, security checks, and docs are complete.
 
 The project should not be reported as **fully integrated with all three assistants** unless the ChatGPT test actually passes.
 

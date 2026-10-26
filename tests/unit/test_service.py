@@ -75,7 +75,7 @@ async def test_default_selection_is_32k(
 
 
 @pytest.mark.asyncio
-async def test_rejects_conflicting_and_unapproved_models(
+async def test_rejects_conflicting_and_uninstalled_models(
     app_config: Any, mock_ollama: httpx.AsyncClient
 ) -> None:
     service = SecondBrainService(
@@ -85,7 +85,7 @@ async def test_rejects_conflicting_and_unapproved_models(
     )
     with pytest.raises(ServiceError, match="either model or model_profile"):
         await service.ask("codex", "hi", model="other:tag", model_profile="32k")
-    with pytest.raises(ServiceError, match="not approved"):
+    with pytest.raises(ServiceError, match="not installed"):
         await service.ask("codex", "hi", model="qwen:unknown")
     with pytest.raises(ServiceError, match="unknown model profile"):
         await service.ask("codex", "hi", model_profile="unknown")
@@ -365,7 +365,7 @@ async def test_approved_direct_model_returns_null_profile(
 
 
 @pytest.mark.asyncio
-async def test_continuation_rejects_revoked_direct_model(
+async def test_continuation_keeps_direct_model_after_budget_override_removed(
     app_config: Any, mock_ollama: httpx.AsyncClient
 ) -> None:
     store = ConversationStore(app_config.database_path)
@@ -374,9 +374,11 @@ async def test_continuation_rejects_revoked_direct_model(
     )
     first = await service.ask("codex", "hello", model="other:tag")
     app_config.allowed_models.pop("other:tag")
-    with pytest.raises(ServiceError) as exc_info:
-        await service.ask("codex", "continue", conversation_id=first["conversation_id"])
-    assert exc_info.value.code == "model_not_approved"
+    resumed = await service.ask(
+        "codex", "continue", conversation_id=first["conversation_id"]
+    )
+    assert resumed["model"] == "other:tag"
+    assert resumed["context_limit_tokens"] == first["context_limit_tokens"]
     assert store.get("codex", first["conversation_id"]).model_tag == "other:tag"
 
 

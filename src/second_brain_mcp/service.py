@@ -1,4 +1,4 @@
-"""Conversation orchestration, context budgeting, and model allowlisting."""
+"""Conversation orchestration, context budgeting, and installed model selection."""
 
 from __future__ import annotations
 
@@ -157,16 +157,28 @@ class SecondBrainService:
                 profile.completion_tokens or self.config.limits.completion_tokens,
             )
         if model is not None:
+            # Explicit model selection is checked against Ollama's live installed
+            # inventory immediately after this selection is built. Profiles give
+            # their mapped tags their configured budget; other installed models
+            # use the default profile's budget unless explicitly overridden.
             selection = self.config.allowed_models.get(model)
-            if selection is None:
-                raise ServiceError(
-                    "model_not_approved", "model is not approved by the server"
-                )
+            profile = next(
+                (item for item in self.config.profiles.values() if item.model == model),
+                None,
+            )
+            context_tokens = (
+                selection.context_tokens
+                if selection is not None
+                else profile.context_tokens
+                if profile is not None
+                else self.config.profiles[self.config.default_profile].context_tokens
+            )
             return ModelSelection(
                 None,
                 model,
-                selection.context_tokens,
-                selection.completion_tokens or self.config.limits.completion_tokens,
+                context_tokens,
+                (selection.completion_tokens if selection else None)
+                or self.config.limits.completion_tokens,
             )
         if conversation is None:
             profile_name = self.config.default_profile
@@ -193,17 +205,14 @@ class SecondBrainService:
                 profile.completion_tokens or self.config.limits.completion_tokens,
             )
         selection = self.config.allowed_models.get(conversation.model_tag)
-        if selection is None:
-            raise ServiceError(
-                "model_not_approved",
-                "this conversation's model is no longer approved; "
-                "choose a model_profile",
-            )
         return ModelSelection(
             None,
             conversation.model_tag,
-            selection.context_tokens,
-            selection.completion_tokens or self.config.limits.completion_tokens,
+            selection.context_tokens
+            if selection
+            else conversation.context_limit_tokens,
+            (selection.completion_tokens if selection else None)
+            or self.config.limits.completion_tokens,
         )
 
     async def _admit(self) -> None:

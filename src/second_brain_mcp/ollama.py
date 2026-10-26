@@ -183,7 +183,8 @@ class OllamaClient:
                     )
                     if loaded
                     else None,
-                    "selectable": bool(profiles or direct_selection),
+                    # Every installed model is available for exact-tag selection.
+                    "selectable": True,
                     "profiles": [profile_name for profile_name, _ in profiles],
                     "configured_context_limit_tokens": (
                         max(
@@ -191,7 +192,9 @@ class OllamaClient:
                             default=(
                                 direct_selection.context_tokens
                                 if direct_selection
-                                else None
+                                else self.config.profiles[
+                                    self.config.default_profile
+                                ].context_tokens
                             ),
                         )
                     ),
