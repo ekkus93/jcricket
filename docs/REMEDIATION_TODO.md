@@ -89,12 +89,14 @@
   - Test: clean v1, partially migrated v1, and an injected mid-migration failure (left at v1 with no new columns).
 - [x] **RM-025** Pair history by walking user→assistant turns, skipping unpaired rows (R-32).
   - Test: history with a stray unpaired `user` row still builds coherent messages.
+  - Evidence (RM2-032, 2026-10-26): pairing still skips unpaired rows (`test_history_pairing_skips_unpaired_rows`), and R-32's "keep the current policy" is restored: trimming stops at the first pair that does not fit (RM2-012).
 
 ### Configuration validation
 
 - [x] **RM-026** Validate `log_level`, budget versus reserve plus minimum input, `completion_tokens < context_tokens`, conflicting budgets for one tag, `token_env` name formats, and `inventory_cache_seconds` range (R-35).
   - Test: one failing config per rule, each with a specific error message; `check-config` reports each.
   - Test: `allowed_models: {x: 1024}` with the default reserve is rejected at load (the reproduced bug 7).
+  - Evidence (RM2-032, 2026-10-26): every rule fails with a specific message through `check-config` (`test_check_config_reports_errors_without_traceback`, RM2-015), and `allowed_models: {x: 1024}` is rejected (`test_rejects_allowed_model_smaller_than_default_completion_reserve`). The tag-conflict rule now follows the amended R-35 (RM2-014/RM2-031); the budget rule uses the shared estimator (RM2-020).
 
 **Gate R1:** All twelve review bugs have regression tests that failed before the fix and pass after; every tool error matches `<code>: <message>`.
 
@@ -149,8 +151,10 @@
 - [x] **RM-047** `auth_headers.py --env-var`; `init_credentials.py --rotate` with atomic replacement and a `0600` `.bak` (R-34).
   - Test: helper with `--env-var`; rotate produces new distinct tokens, a `0600` file, and a `0600` backup.
   - Test: the R-34 rotation test (old token gets 401 after rebuild; new token succeeds).
+  - Evidence (RM2-032, 2026-10-26): `auth_headers.py --env-var` now works for any valid principal (`test_auth_header_helper_accepts_other_principal_with_env_var`, RM2-017); `--rotate` replaces `.bak` atomically on every rotation and keeps it `0600` (`test_three_consecutive_rotations_keep_previous_tokens_in_backup`, RM2-016); the R-34 old-token/new-token test still passes.
 - [x] **RM-048** Fix `deploy/reverse-proxy.example`: remove the Host rewrite, stop forwarding `Authorization`, and add the "non-functional until SB-041/SB-042" banner; add validated `trusted_hosts` config used by the middleware and `TransportSecuritySettings` (R-42).
   - Test: a `trusted_hosts` entry is accepted as Host; an unlisted host is still rejected; invalid entries (with a scheme, port, or path) fail config validation.
+  - Evidence (RM2-032, 2026-10-26): the example keeps `Host $host`, carries the non-functional banner, and now actually stops forwarding client credentials with `proxy_set_header Authorization "";` (`test_proxy_example_strips_client_authorization`, RM2-018). The `trusted_hosts` tests still pass.
 - [x] **RM-049** Documentation updates listed in R-39 and R-34: operations, README, local-clients (credential file distinction, error codes, usable input sizes, single process, retention and export, FastMCP environment, `X-Request-ID`, `MAX_LISTED_MODELS`).
   - Acceptance: each listed topic appears in the named document; no doc claims the helper reads the service credential file.
 
@@ -176,10 +180,12 @@
   - Applied error-code, inventory truncation, continuation selection, transactional persistence, admin export/retention, trusted-host, single-process, and request-ID guidance. The owner-approved Ralph Bridge removal was already recorded under RM-006.
 - [x] **RM-061** Re-evaluate SB-018, SB-019, SB-022, SB-024–SB-026, SB-028, SB-032–SB-035, SB-060, and SB-065 in `docs/TODO.md` against their original wording and the new evidence; check only items that fully pass; add evidence rows to the verification record. Do not change requirement text.
   - Re-evaluated requirements without changing their wording. SB-018/019, 022, 024–026, 028, 032–035, 060, and 065 now pass after the RM-064 final rerun. Evidence rows were added to `docs/TODO.md`.
+  - Evidence (RM2-032, 2026-10-26): the SB items whose text contradicted their checkbox (SB-028, SB-035) and the other reworded items were restored and re-evaluated by RM2-003; SB-025 was re-evaluated after the trimming fix (RM2-032). `scripts/check_todo_integrity.py` reports no requirement-text drift.
 - [x] **RM-062** Write `docs/RELEASE_NOTES.md` for v0.1 with features, known limitations (4k usable input, single process, local auth only), external blockers (ChatGPT, systemd lifecycle), and the verification summary (R-05).
   - Added `docs/RELEASE_NOTES.md` with the current feature set, limitations, blockers, and phase verification evidence.
 - [x] **RM-063** Check SB-066 only after RM-061 and RM-062 are complete.
   - SB-066 was checked after the evidence reconciliation and release notes were complete; final verification is tracked by RM-064.
+  - Evidence (RM2-032, 2026-10-26): SB-066 was re-evaluated after RM2-003 and RM2-033 (see SB-066's RM2-032 evidence).
 - [x] **RM-064** Final full check: `uv sync --locked`, Ruff check, Ruff format check, `uv run pytest` (mocked), and `SECOND_BRAIN_LIVE=1 uv run pytest -m live` (live). Record the commit hash and results.
   - Passed on tested code commit `b1ffb35`: locked sync, Ruff check, Ruff format check, `uv run pytest -q` (137 passed, 1 live skipped), and `SECOND_BRAIN_LIVE=1 uv run pytest -m live -q` (1 passed). One Starlette/httpx deprecation warning remains.
 

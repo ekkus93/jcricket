@@ -61,6 +61,7 @@
   - Regression tests cover current profile remapping, profile/direct selection changes, mode change, revoked models, and unchanged selections after failure (RM-011/RM-013/R-51).
 - [x] **SB-025** Budget prompt tokens conservatively; keep full history in SQLite, include recent history that fits, set `history_trimmed` accurately, and reject oversized *current* input without silent truncation.
   - Estimator framing, newest-pair trimming, fit status, larger-profile suggestions, and no-write rejection are covered by unit tests (RM-031/RM-033/R-51).
+  - Evidence (RM2-032, 2026-10-26): re-evaluated after RM2-012. Included history is now the newest contiguous run (`test_trimming_stops_at_first_pair_that_does_not_fit`, `test_fully_fitting_history_keeps_exact_order`); oversized current input is rejected with the selection's budget named (`test_context_too_large_names_*`); estimates come from `budget.py` (RM2-020). Every clause is met.
 - [x] **SB-026** Serialize concurrent modifications of the same conversation, or otherwise guarantee sane chronological ordering and no history corruption.
   - Concurrent profile-switch continuation test verifies user/assistant pair ordering and authoritative selection reads after lock acquisition (RM-014/R-24).
 - [x] **SB-027** Add local administrative CLI to list/show/delete conversations and purge old conversations with bulk-operation confirmation.
@@ -79,6 +80,7 @@
   - Regression coverage includes 413, bounded queue behavior, injectable rate-window expiry, Host/Origin variants, trusted hosts, and concurrency (RM-022/RM-035/RM-048/R-51).
 - [x] **SB-033** Provide `.env`/secret provisioning instructions and test token rotation without committing real credentials.
   - Provisioning and separate user/service credential-file instructions are documented. Rotation and old-token rejection passed with private `.bak` files and mode checks (RM-047).
+  - Evidence (RM2-032, 2026-10-26): provisioning and the separate user/service files are documented in `docs/integrations/local-clients.md` and `docs/operations.md`; rotation is tested by `tests/integration/test_credential_rotation.py` (repeat rotations, preserved lines, unwritable target, rollback) and `test_rotation_atomically_replaces_tokens_and_preserves_private_backup` (old token gets 401, new token works). No real credentials are tracked (`git ls-files` shows only `deploy/credentials.env.example`).
 - [x] **SB-034** Implement sanitized logs, request IDs, model/profile/time/usage metrics, and basic `/healthz` without secret/prompt disclosure.
   - Tests verify unique server IDs, headers on success and auth errors, exact model logging, hashed conversation IDs, and absence of prompt/answer/token markers (RM-035/RM-036).
 - [x] **SB-035** Add security tests for unauthenticated calls to both tools, forged client identity, cross-client IDs, malicious input text, unapproved model selection, oversized payloads, and accidental secret logging.
@@ -141,6 +143,7 @@
   - Final run on tested code commit `b1ffb35`: locked sync, Ruff lint/format, `uv run pytest -q` (137 passed, 1 live skipped), and `SECOND_BRAIN_LIVE=1 uv run pytest -m live -q` (1 passed). One Starlette/httpx deprecation warning.
 - [x] **SB-066** Reconcile TODO checkboxes against code and verified evidence. Document deferred items and exact blockers. Produce v0.1 release notes.
   - Evidence reconciliation is complete and `docs/RELEASE_NOTES.md` is available. Final verification results are recorded under RM-064.
+  - Evidence (RM2-032, 2026-10-26): checkboxes were reconciled against original requirement text (RM2-003) and `scripts/check_todo_integrity.py` passes; deferred items (SB-100–SB-107) and blockers (SB-040 owner-dropped, SB-041–SB-046 and SB-054 ChatGPT, SB-052/SB-053 live re-runs, SB-062 systemd) are named in the Status line; `docs/RELEASE_NOTES.md` was brought in line with delivered behavior by RM2-033.
 
 **Gate P6:** Secure, reproducible MVP ready for regular use.
 
