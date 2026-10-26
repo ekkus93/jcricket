@@ -284,7 +284,7 @@ class SecondBrainService:
             pair_cost = _estimate_messages([user_text, assistant_turn.content])
             if pair_cost > remaining:
                 trimmed = True
-                continue
+                break
             included[0:0] = [user_turn, assistant_turn]
             remaining -= pair_cost
         if len(included) != len(history):

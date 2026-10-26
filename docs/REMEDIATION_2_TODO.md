@@ -60,10 +60,12 @@
 
 ### Conversation behavior
 
-- [ ] **RM2-012** Stop history trimming at the first pair that doesn't fit, so included history is always the newest contiguous run (R2-12).
+- [x] **RM2-012** Stop history trimming at the first pair that doesn't fit, so included history is always the newest contiguous run (R2-12).
   - Test: uneven pair sizes (small oldest, large middle, small newest) include only the newest pair and set `history_trimmed: true`.
   - Test: a fully fitting history keeps the exact message order.
   - Evidence required: the uneven-size test fails on `ad85cdb` (the oldest pair is included).
+  - Evidence (fail first): `test_trimming_stops_at_first_pair_that_does_not_fit` on unfixed code: `AssertionError … At index 0 diff: 'oldest-user' != 'newest-user'`.
+  - Evidence (after fix): `service.py` trimming loop now `break`s at the first pair that does not fit. `test_trimming_stops_at_first_pair_that_does_not_fit` and `test_fully_fitting_history_keeps_exact_order` pass; full suite 161 passed, 1 skipped.
 - [ ] **RM2-013** Name the budget correctly in `context_too_large` (`the <profile> prompt budget` / `the <N>-token prompt budget`) (R2-13).
   - Test: a 6000-token direct model produces `the 6000-token prompt budget`; `4k` produces `the 4k prompt budget`.
   - Evidence required: the direct-model test fails on `ad85cdb` (`5k`).

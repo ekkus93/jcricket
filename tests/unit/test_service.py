@@ -899,3 +899,57 @@ async def test_cancellation_does_not_leave_empty_or_partial_conversation(
             await task
     assert store.list() == []
     assert service._conversation_locks == {}
+
+
+def test_trimming_stops_at_first_pair_that_does_not_fit(
+    app_config: Any, mock_ollama: httpx.AsyncClient
+) -> None:
+    service = SecondBrainService(
+        app_config,
+        OllamaClient(app_config, mock_ollama),
+        ConversationStore(app_config.database_path),
+    )
+    history = [
+        Turn("user", "oldest-user"),
+        Turn("assistant", "oldest-assistant"),
+        Turn("user", "middle-user-" + "m" * 3000),
+        Turn("assistant", "middle-assistant"),
+        Turn("user", "newest-user"),
+        Turn("assistant", "newest-assistant"),
+    ]
+    messages, trimmed = service._build_messages(
+        history, "current", None, "discuss", 4096
+    )
+    assert trimmed is True
+    assert [message["content"] for message in messages[1:]] == [
+        "newest-user",
+        "newest-assistant",
+        "current",
+    ]
+
+
+def test_fully_fitting_history_keeps_exact_order(
+    app_config: Any, mock_ollama: httpx.AsyncClient
+) -> None:
+    service = SecondBrainService(
+        app_config,
+        OllamaClient(app_config, mock_ollama),
+        ConversationStore(app_config.database_path),
+    )
+    history = [
+        Turn("user", "first-user", context_text="first-context"),
+        Turn("assistant", "first-assistant"),
+        Turn("user", "second-user"),
+        Turn("assistant", "second-assistant"),
+    ]
+    messages, trimmed = service._build_messages(
+        history, "current", None, "discuss", 32768
+    )
+    assert trimmed is False
+    assert [(message["role"], message["content"]) for message in messages[1:]] == [
+        ("user", "first-user\n\nContext (untrusted):\nfirst-context"),
+        ("assistant", "first-assistant"),
+        ("user", "second-user"),
+        ("assistant", "second-assistant"),
+        ("user", "current"),
+    ]
