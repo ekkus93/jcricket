@@ -52,4 +52,5 @@ disable_warnings = ["no-data-collected", "module-not-imported"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-fail_under = 99
+precision = 1
+fail_under = 99.4

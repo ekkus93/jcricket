@@ -69,7 +69,7 @@ Coverage is measured with `coverage` (a dev dependency), including code the test
 uv run coverage erase && uv run coverage run -m pytest -q && uv run coverage combine && uv run coverage report
 ```
 
-Configuration lives in `[tool.coverage.*]` in `pyproject.toml`; `fail_under` makes the report fail if coverage drops below the agreed level. Plain `uv run pytest` does not measure coverage, so it stays fast.
+Configuration lives in `[tool.coverage.*]` in `pyproject.toml`. The gate is `fail_under = 99.4` with `precision = 1`: coverage rounds the total to one decimal place before comparing, so the report fails as soon as the total rounds to 99.3% or less. (With the default precision of 0, a total of 98.6% would still pass a threshold of 99.) Plain `uv run pytest` does not measure coverage, so it stays fast.
 
 ## Troubleshooting
 
