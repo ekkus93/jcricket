@@ -176,6 +176,8 @@ Extend the lock-registry test: after 50 sequential asks **and** one ask cancelle
 
 ### R2-15 Profile tag sharing and placeholder detection
 
+> **Owner decision (2026-10-26):** the tag-sharing part of R2-15 is reversed by R2-60. Some models (including the owner's Qwen3.5 9B) ignore the request's `num_ctx`, so one tag cannot safely carry two budgets. Placeholder detection stays.
+
 - **Remove** the validator rule that rejects one model tag mapped by two profiles with different budgets (`config.py`, "conflicting profile budgets"). Several profiles may map to the same tag; each request sends its own `num_ctx`.
 - **Change** the allowed-model consistency rule (REMEDIATION_SPEC R-35): a tag in `allowed_models` that is also mapped by one or more profiles must have a `context_tokens` equal to **one of** those profiles' budgets. Otherwise, reject with the existing message.
 - **Add placeholder detection.** Reject any profile or allowed-model tag equal to `SET_FROM_OLLAMA_LIST` or starting with `REPLACE_WITH_`, with the message `model tag placeholders must be replaced with exact names from \`ollama list\``.
@@ -323,3 +325,58 @@ All of the following pass on the final commit, with results recorded in `docs/RE
 | RM-021 cancelled-ask clause untested | R2-14 |
 | RM-052/RM-053 live checks not repeatable by the reviewer | R2-50 |
 | My own omission: round-1 R-03 table missed SB-001, SB-028, SB-035, SB-050–SB-058, SB-061, SB-062 | R2-02, R2-03 |
+
+## 11. Owner follow-up (2026-10-26)
+
+The owner reported that some Ollama models ignore the request's `options.num_ctx`; their context window is fixed by the model variant (for example, a Modelfile `PARAMETER num_ctx`). The owner's Qwen3.5 9B behaves this way, which is why the workstation uses separate variants per context size. R2-15 assumed every request's `num_ctx` takes effect, so it is partly reversed here, and a startup check is added.
+
+### R2-60 One tag, one budget
+
+- Restore the rule that rejects a model tag mapped by two or more profiles. Because profile budgets are fixed by profile name, two profiles sharing a tag always disagree on budget. The message names the tag and profiles and explains that some models ignore `num_ctx`, so each budget needs its own model variant.
+- A tag in `allowed_models` that is also mapped by a profile must use that profile's budget (the single-budget form of R-35).
+- Placeholder detection from R2-15 stays, and is checked first, so `config.example.yaml` still fails with only the placeholder message.
+
+**Acceptance:**
+
+- One tag shared by all four profiles fails with the new message.
+- Four distinct tags load.
+- An allowed model sharing a profile tag loads with the profile's budget and fails with any other budget.
+- `config.example.yaml` fails with exactly the placeholder message.
+
+### R2-61 Documentation of the context-window requirement
+
+`docs/operations.md`, `docs/RELEASE_NOTES.md`, `README.md` (where it describes profiles), `config.example.yaml` (comment), and `SPEC.md` §5 must state:
+
+- each profile's budget must not exceed the model variant's real context window;
+- some models ignore the request's `num_ctx`, so each profile needs its own variant whose window is fixed in its Modelfile.
+
+Replace the R-35 owner-decision note in `REMEDIATION_SPEC.md` with this decision, and remove the claim that profiles may share a tag from every document that makes it.
+
+### R2-62 Verify each configured budget against the model's real window
+
+Add a read-only check that runs in `second-brain check-config` and at the start of `second-brain serve`.
+
+- **Lookup.** For every profile and allowed model, call Ollama `POST /api/show` with `{"model": "<tag>"}`. Read:
+  - the pinned window: the `num_ctx` value in the `parameters` text, if present;
+  - the native window: the integer `model_info` value whose key ends in `.context_length`, if present.
+- **Rules**, per selection with budget `B`:
+  - Tag not found (HTTP 404) → **error**: `profile <p> maps to tag "<t>", which is not installed in Ollama` (or `allowed model "<t>" is not installed in Ollama`).
+  - Pinned window `W` present and `B > W` → **error**: `profile <p> budget <B> exceeds the <W>-token context window pinned by tag "<t>"; use a variant built with num_ctx >= <B>`.
+  - No pinned window and native window `N` present with `B > N` → **error**: `profile <p> budget <B> exceeds the native <N>-token context length of tag "<t>"`.
+  - No pinned window otherwise → **warning**: `tag "<t>" does not pin num_ctx; if the model ignores request num_ctx, its window is Ollama's default context length, which may be smaller than <B>`.
+- **Ollama unreachable or malformed responses:**
+  - `check-config` exits 1 with `could not verify model context windows: <sanitized reason>`;
+  - `serve` logs one WARNING with the same text and starts anyway, so a service that starts before Ollama is ready still comes up.
+- **Exit behavior.** Any error makes `check-config` and `serve` print every error (one line each, prefixed `second-brain: `) to stderr and exit 1 without a traceback. Warnings print with the prefix `second-brain: warning: ` and do not change the exit status.
+- **Scope.** The check only reads model metadata; it never loads, pulls, or runs a model. `SPEC.md` §3.1, §4.2, and §5 must list `/api/show` as an allowed read-only endpoint used only for this check.
+
+**Acceptance (mocked Ollama):**
+
+- A pinned window smaller than the budget fails.
+- An equal pinned window passes with no warning.
+- No pinned window with budget ≤ native gives only a warning.
+- No pinned window with budget > native fails.
+- A 404 fails as not installed.
+- Allowed models are checked like profiles.
+- An unreachable Ollama makes `check-config` exit 1, while `serve` warns and continues.
+- A live run of `check-config` against the workstation's Ollama passes, warning only for the unpinned `4k` tag.

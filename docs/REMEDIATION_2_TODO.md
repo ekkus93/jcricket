@@ -82,6 +82,7 @@
   - Evidence (fail first): on unfixed code `test_example_config_fails_only_on_placeholders` and `test_example_config_with_real_tags_loads[tags0]` (one shared tag) failed, as did the new placeholder and allowed-model sharing tests (5 failed).
   - Evidence (after fix): `config.py` drops the profile-vs-profile rule, checks allowed-model budgets against the set of profile budgets for the tag, and rejects `SET_FROM_OLLAMA_LIST` / `REPLACE_WITH_*` tags. All 22 tests in `tests/unit/test_config.py` pass; full suite 169 passed, 1 skipped. The private workstation `config.yaml` still loads.
   - Note: the matching `REMEDIATION_SPEC.md` R-35 amendment and owner-decision record are RM2-031.
+  - Owner decision (2026-10-26): the tag-sharing part of this task is reversed by RM2-050 (R2-60), because some models, including the owner's Qwen3.5 9B, ignore the request's `num_ctx`. Placeholder detection stays.
 - [x] **RM2-015** Make every `second-brain` command print configuration and credential errors to stderr and exit 1 without a traceback (R2-17).
   - Test: a parametrized CLI test runs `check-config` with one invalid config per R-35 rule plus the placeholder rule, and with a missing token env var; each exits 1, stderr has the message, and stderr has no `Traceback`.
   - Evidence required: the test fails on `ad85cdb` (traceback).
@@ -146,6 +147,7 @@
 - [x] **RM2-031** Amend `REMEDIATION_SPEC.md` R-35 for tag sharing (R2-15), recorded as an `Owner decision (YYYY-MM-DD)` note, and document helper usage for other principals and the new rotation behavior in `docs/operations.md` and `docs/integrations/local-clients.md` (R2-18, R2-19).
   - Evidence: R-35's allowed-model bullet in `docs/REMEDIATION_SPEC.md` now says "does not equal any of the budgets of the profiles that map the same tag" and that profiles may share a tag, with an `Owner decision (2026-10-26)` sub-bullet citing R2-15. `docs/integrations/local-clients.md` and `docs/operations.md` describe line-preserving, all-or-nothing rotation with a replaced `.bak`, and `auth_headers.py <principal> --env-var NAME` for other principals.
   - Note: the owner-decision record is based on the owner commissioning REMEDIATION_2 and directing its implementation, not on a separate explicit approval of the R-35 wording; it is flagged for owner confirmation.
+  - Owner decision (2026-10-26): the tag-sharing part of this task is reversed by RM2-050 (R2-60), because some models, including the owner's Qwen3.5 9B, ignore the request's `num_ctx`. Placeholder detection stays.
 - [x] **RM2-032** Re-evaluate SB-025, SB-033, SB-066 in `docs/TODO.md` and RM-025, RM-026, RM-047, RM-048, RM-061, RM-063 in `docs/REMEDIATION_TODO.md` against their unchanged text and the new evidence, adding `Evidence:` sub-bullets.
   - Acceptance: the integrity checker reports zero violations; every checked item has evidence that covers each clause.
   - Evidence: `Evidence (RM2-032, 2026-10-26)` sub-bullets added under SB-025, SB-033, SB-066, RM-025, RM-026, RM-047, RM-048, RM-061, and RM-063; all remain checked because each clause now has named evidence. No requirement text changed; the integrity checker passes.
@@ -159,6 +161,18 @@
   - Evidence: all R2-50 checks ran on 2026-10-26 against tested code commit `04bf04a` (later commits change only documentation); results are in the verification record below.
 
 **Gate E:** All tasks above are checked with evidence, the integrity checker passes, and the Status lines of all three TODO files are accurate.
+
+## Phase F — Owner follow-up (2026-10-26)
+
+- [ ] **RM2-050** Restore the one-tag-one-budget rule, keeping placeholder detection first (R2-60).
+  - Test: one tag shared by all four profiles fails with the new message; four distinct tags load; an allowed model sharing a profile tag loads with that profile's budget and fails otherwise; `config.example.yaml` fails with exactly the placeholder message.
+- [ ] **RM2-051** Update `SPEC.md` §5, `docs/operations.md`, `docs/RELEASE_NOTES.md`, `README.md`, `config.example.yaml`, and the R-35 owner-decision note in `REMEDIATION_SPEC.md` for the context-window requirement (R2-61).
+  - Acceptance: no document says profiles may share a tag; each named document states that a profile's budget must not exceed its variant's real window and that some models ignore request `num_ctx`.
+- [ ] **RM2-052** Add the `/api/show` context-window check to `check-config` and `serve` with the R2-62 rules, messages, and exit behavior; list `/api/show` in `SPEC.md` §3.1, §4.2, and §5 (R2-62).
+  - Test: every R2-62 mocked acceptance case.
+  - Acceptance: a live `check-config` against the workstation's Ollama passes with a warning only for the unpinned `4k` tag.
+
+**Gate F:** The strict tag rule is back, the context-window check runs in `check-config` and `serve`, and the docs describe both.
 
 ## Finding coverage
 
