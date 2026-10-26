@@ -19,8 +19,9 @@
 
 - [ ] **RM-001** Commit the current implementation as-is, before any remediation, so later diffs are reviewable (R-01). Include `pyproject.toml`, `uv.lock`, `src/`, `tests/`, `deploy/`, `scripts/`, `config.example.yaml`, `docs/operations.md`, `docs/integrations/`, `AGENTS.md`, and the modified `.gitignore`, `README.md`, `docs/TODO.md`.
   - Acceptance: `git status` is clean apart from ignored files; no `config.yaml`, database, credentials, `.venv`, or `__pycache__` is tracked.
-- [ ] **RM-002** Fix `.gitignore` gaps: `.serena/`, `*.db`, `*.sqlite`, `*.sqlite-wal`, `*.sqlite-shm`, `credentials.env` (keep `*.env.example` allowed) (R-06).
+- [x] **RM-002** Fix `.gitignore` gaps: `.serena/`, `*.db`, `*.sqlite`, `*.sqlite-wal`, `*.sqlite-shm`, `credentials.env` (keep `*.env.example` allowed) (R-06).
   - Acceptance: `git check-ignore` confirms each pattern; `deploy/credentials.env.example` is still tracked.
+  - Verified with `git check-ignore -v --no-index`; the example credentials file remains tracked and unignored.
 - [ ] **RM-003** Verify Gate P0 from a fresh clone (R-01). Depends on RM-001 and RM-002.
   - Acceptance: in an empty temporary directory, `git clone`, `uv sync --locked`, Ruff check, Ruff format check, and `uv run pytest` all pass. Record the commit hash and results in the verification record.
 - [ ] **RM-004** Add the TODO integrity rules from R-02 to the "Working rules" section of `docs/TODO.md`.
