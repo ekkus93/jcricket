@@ -1,6 +1,6 @@
 # Second Brain MCP — Unit Test Coverage TODO
 
-**Status:** Not started  
+**Status:** All TCT tasks checked with evidence (2026-10-26). Two defects were found and fixed (TCT-032, TCT-063). Exceptions: partial branches `cli.py:117->exit` and `init_credentials.py:122->124` are unreachable and documented; plain pytest runtime (12–13 s) is close to its 15 s limit.  
 **Date:** 2026-10-26  
 **Reference:** [TEST_COVERAGE_SPEC.md](TEST_COVERAGE_SPEC.md) (requirements `TC-xx`)
 
@@ -118,8 +118,10 @@
   - Acceptance: `src/second_brain_mcp` ≥ 97% and `scripts/` + `deploy/` ≥ 90% combined line+branch coverage; every §10 location covered or marked removed; `fail_under` set to the achieved total rounded down; no new `# pragma: no cover`.
   - Evidence: `src/second_brain_mcp` 99.93% (1052 statements, 0 missed, 296 branches, 1 partial); `scripts/` + `deploy/` 97.67% (253 statements, 2 missed); total 99.47%. Every §10 location is covered, except `service.py:175`, which was removed (TCT-023). `fail_under = 99` is in `[tool.coverage.report]`; the full report passes, and `--fail-under=99.9` exits 2, so the gate works. `grep -rn "pragma: no cover"` over `src`, `scripts`, `deploy`, `tests` finds nothing.
   - Note: the remaining partial branches are `cli.py:117->exit` (unreachable `action`, see TCT-060) and `init_credentials.py:122->124` (see TCT-064). The uncovered script lines (`auth_headers.py:55`, `63->exit`; `check_todo_integrity.py:58`, `122->127`, `137->exit`) are outside §10 and above the 90% target.
-- [ ] **TCT-071** Final verification on the last commit (TC-71).
+- [x] **TCT-071** Final verification on the last commit (TC-71).
   - Acceptance: every TC-71 command passes and is recorded with the commit hash; `uv run pytest -q` stays under 15 seconds; the final per-module coverage table is in the verification record.
+  - Evidence: on `de88a70`, `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q` (280 passed, 1 skipped, 1 Starlette/httpx deprecation warning; 12.2 s wall), the TC-01 coverage command (report exit 0 at `fail_under = 99`, total 99%), and `scripts/check_todo_integrity.py` all pass.
+  - Note: plain pytest now takes 12–13 s (it was 6 s at the start), mainly from about a dozen new subprocess-based script tests; no single test exceeds 0.7 s. It is under the 15 s limit, but with little headroom.
 
 **Gate F:** Coverage targets are met and enforced by `fail_under`, every new test asserts behavior, and any defect found was fixed with fail-first evidence.
 
@@ -141,7 +143,7 @@ Populate as work proceeds. Do **not** predeclare success.
 | Verification | Result | Evidence (commit/command/output) |
 |---|---|---|
 | Baseline with subprocess coverage (TCT-001) | Recorded | 2026-10-26, on `c4eb4f1` + TCT-001 config: auth.py 96%, budget 100%, cli 81%, config 90%, errors 100%, ollama 90%, prompts 75%, schemas 100%, server 97%, service 95%, store 96%, `deploy/auth_headers.py` 85%, `scripts/check_todo_integrity.py` 92%, `scripts/init_credentials.py` 84%; total 91% (1300 statements, 88 missed, 388 branches, 56 partial). 202 passed, 1 skipped. |
-| Phase checks (sync, Ruff, pytest, coverage) | Not run | — |
+| Phase checks (sync, Ruff, pytest, coverage) | Passed | 2026-10-26, after each phase: Ruff check and format clean; pytest 202 → 220/221 (B) → 227 (C) → 248 (D) → 276/280 (E), always 1 skipped (opt-in live); coverage rising from 91% to 99%. |
 | Fail-first evidence for exposed defects (TC-03, TCT-063) | Recorded | TCT-032: `load_config` list-root message lacked the file path (test failed first, then fixed, `a0ae4d8`). TCT-063: create over an existing credentials file crashed with a `FileExistsError` traceback (test failed first, then fixed). |
-| Final coverage table and `fail_under` (TCT-070) | Not run | — |
-| Final verification (TCT-071) | Not run | — |
+| Final coverage table and `fail_under` (TCT-070) | Passed | `de88a70`: auth 100%, budget 100%, cli 99% (1 partial), config 100%, errors 100%, ollama 100%, prompts 100%, schemas 100%, server 100%, service 100%, store 100%; `deploy/auth_headers.py` 96%, `scripts/check_todo_integrity.py` 97%, `scripts/init_credentials.py` 99%. Package 99.93%, scripts + deploy 97.67%, total 99.47%; `fail_under = 99`. |
+| Final verification (TCT-071) | Passed | 2026-10-26, `de88a70`: locked sync, Ruff check and format, `pytest -q` 280 passed / 1 skipped in 12.2 s, coverage report exit 0, integrity checker passed. |
