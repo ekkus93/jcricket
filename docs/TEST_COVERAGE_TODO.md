@@ -90,10 +90,12 @@
   - Test: `current_principal()` without a principal raises exactly `unauthorized: authenticated principal required`.
   - Test: a `ToolError` caused by `RuntimeError("secret-marker")` from the parent `FastMCP.call_tool` yields exactly the `internal_error` text, no `secret-marker` or `boom` in the response, and an ERROR record with `unexpected_error_type=RuntimeError`.
   - Evidence: `tests/integration/test_http_edges.py` — `test_unknown_paths_return_404_with_request_id` (GET `/unknown`, POST `/mcp/extra`), `test_current_principal_without_authentication_is_unauthorized`, and `test_unexpected_tool_error_falls_back_to_internal_error` (patches `FastMCP.call_tool`, the parent of our subclass). No defect found.
-- [ ] **TCT-060** Admin CLI and prompts (TC-60).
+- [x] **TCT-060** Admin CLI and prompts (TC-60).
   - Test: `get-any` found and unknown; `export` of all conversations to stdout with and without `--principal`; `export <unknown> --output FILE` exits `conversation not found` and creates no file; `purge` without age or retention exits with the TC-60 message; TTY confirmation `y` deletes.
   - Test: `main()` with patched `sys.argv` dispatches `check-config` (prints `Configuration is valid.` with a patched context-window check), `conversations list`, and `serve` (patched `server.run` receives the loaded config).
   - Test: `system_prompt("nope")` raises `ValueError("unsupported mode: nope")`.
+  - Evidence: `tests/integration/test_cli_admin.py` (10 tests): `get-any` found and unknown; `export` to stdout for all conversations and for `--principal codex` (turn contents checked); `export missing --output FILE` exits `conversation not found` with no file; `purge` with no age or retention exits with the exact message and deletes nothing; TTY + `y` deletes only the target; `main()` dispatches `check-config` (`Configuration is valid.`), `conversations list`, and `serve` (patched `server.run` gets the loaded config); `system_prompt("nope")`. No defect found. `cli.py` 99% (0 missed lines), `prompts.py` 100%.
+  - Note: the one remaining partial branch, `cli.py:117->exit`, is an `action` outside the `elif` chain; argparse's subcommands make it unreachable. It is left as is rather than tested as a silent no-op or rewritten (a behavior change outside this TODO).
 - [ ] **TCT-061** `deploy/auth_headers.py` failure cases (TC-61).
   - Test: invalid `--env-var` exits 2; malformed line, short token, and missing file exit 1 with the exact TC-61 messages; a quoted value is printed unquoted; failures print nothing to stdout and never echo the token.
 - [ ] **TCT-062** `scripts/check_todo_integrity.py` failure cases (TC-62).
