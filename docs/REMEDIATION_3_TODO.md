@@ -19,8 +19,9 @@
 
 ## Phase A — Process (P0, do first)
 
-- [ ] **RM3-001** Add `("docs/REMEDIATION_3_TODO.md", <commit that first adds it>)` to `BASELINES` in `scripts/check_todo_integrity.py` (R3-02).
+- [x] **RM3-001** Add `("docs/REMEDIATION_3_TODO.md", <commit that first adds it>)` to `BASELINES` in `scripts/check_todo_integrity.py` (R3-02).
   - Acceptance: the checker passes; a temporary edit to one `Test:` line in this file makes it exit 1, and reverting restores a pass. Record both outcomes.
+  - Evidence: `BASELINES` gains `("docs/REMEDIATION_3_TODO.md", "3205580")`, the commit that first added this file. A temporary edit of RM3-010's first `Test:` line made the checker exit 1 ("RM3-010: requirement sub-bullet changed or removed"); after reverting, it passes.
 
 **Gate A:** This TODO is under integrity protection.
 
