@@ -31,6 +31,32 @@ async def test_chat_request_never_contains_tools(app_config: Any) -> None:
 
 
 @pytest.mark.asyncio
+async def test_chat_warnings_use_reported_counts_without_content(
+    app_config: Any, caplog
+) -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "message": {"content": "private answer marker"},
+                "prompt_eval_count": 40000,
+                "eval_count": 100,
+            },
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama.test"
+    ) as http:
+        await OllamaClient(app_config, http).chat(
+            "qwen:32k", [{"role": "user", "content": "private prompt marker"}], 32768
+        )
+    assert "category=estimate_exceeded" in caplog.text
+    assert "category=context_saturated" in caplog.text
+    assert "private answer marker" not in caplog.text
+    assert "private prompt marker" not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_model_inventory_reports_profiles_and_loaded_status(
     app_config: Any, mock_ollama: httpx.AsyncClient
 ) -> None:

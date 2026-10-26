@@ -43,6 +43,7 @@ class ModelSelection:
     model_profile: str | None
     model_tag: str
     context_limit_tokens: int
+    completion_tokens: int | None = None
 
 
 class ConversationStore:

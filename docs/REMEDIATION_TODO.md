@@ -94,19 +94,19 @@
 
 ## Phase R2 — Interface, budgeting, and logging (P0)
 
-- [ ] **RM-030** Use `Literal` types for `mode` and `model_profile` so the published schema has `enum` arrays (R-14).
+- [x] **RM-030** Use `Literal` types for `mode` and `model_profile` so the published schema has `enum` arrays (R-14).
   - Test: `tools/list` schema for `ask_second_brain` contains the exact enums; an invalid mode is rejected by the MCP layer.
-- [ ] **RM-031** Implement the estimator with `MESSAGE_OVERHEAD_TOKENS = 8` and `PROMPT_OVERHEAD_TOKENS = 16` (R-30).
+- [x] **RM-031** Implement the estimator with `MESSAGE_OVERHEAD_TOKENS = 8` and `PROMPT_OVERHEAD_TOKENS = 16` (R-30).
   - Test: estimate for N short messages includes 8·N + 16 overhead.
-- [ ] **RM-032** Add per-profile and per-model `completion_tokens` overrides; accept both the integer and mapping forms in `allowed_models`; set the 4k reserve to 1024 in `config.example.yaml` (R-31).
+- [x] **RM-032** Add per-profile and per-model `completion_tokens` overrides; accept both the integer and mapping forms in `allowed_models`; set the 4k reserve to 1024 in `config.example.yaml` (R-31).
   - Test: overrides change the effective reserve and the `num_predict` sent to Ollama; existing integer-form configs still load.
-- [ ] **RM-033** Make `context_too_large` report the approximate available bytes and suggest the smallest profile that fits (R-31).
+- [x] **RM-033** Make `context_too_large` report the approximate available bytes and suggest the smallest profile that fits (R-31).
   - Test: a 3 KB input on `4k` suggests `32k`; an input too large for `256k` suggests none.
-- [ ] **RM-034** Log warnings for `estimate_exceeded` and `context_saturated` using Ollama-reported counts (R-17).
+- [x] **RM-034** Log warnings for `estimate_exceeded` and `context_saturated` using Ollama-reported counts (R-17).
   - Test: mocked responses trigger each warning; no content appears in the log.
-- [ ] **RM-035** Server-generated `request_id` (uuid4) in middleware, a ContextVar, and an `X-Request-ID` response header on every response, including errors (R-43).
+- [x] **RM-035** Server-generated `request_id` (uuid4) in middleware, a ContextVar, and an `X-Request-ID` response header on every response, including errors (R-43).
   - Test: two requests with the same JSON-RPC id get different request IDs; 401 and 403 responses carry the header.
-- [ ] **RM-036** Tool log lines contain exactly the R-44 fields, including the exact model tag, with a hashed conversation-ID prefix (R-44).
+- [x] **RM-036** Tool log lines contain exactly the R-44 fields, including the exact model tag, with a hashed conversation-ID prefix (R-44).
   - Test: the `caplog` leakage test from R-44 with marker strings in question, context, answer, and tokens.
 
 **Gate R2:** Schemas are enum-typed; budget errors are actionable; logs are correlatable and leak-free by test.
@@ -199,7 +199,7 @@ Populate as work proceeds. Do **not** predeclare success.
 | Fresh-clone install, lint, and tests (RM-003) | Passed | Local fresh clone at baseline commit `80ac1102b25128905731505ce167f96050b8b524`; `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 35 passed, one Starlette/httpx deprecation warning. No Ollama/network service was needed. |
 | Phase R0 checks | Passed | After TODO integrity edits: `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest`: 35 passed, one Starlette/httpx deprecation warning. |
 | Phase R1 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 95 passed, one Starlette/httpx deprecation warning. MCP SDK error wrapper behavior is documented under RM-019. |
-| Log leakage test (RM-036) | Not run | — |
+| Phase R2 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 101 passed, one Starlette/httpx deprecation warning. Tests cover enum schemas and MCP rejection, estimator framing, profile/direct completion overrides, actionable size errors, warning counts without content, unique request IDs and error headers, and log leakage. |
 | Full R-51 mocked coverage (RM-051) | Not run | — |
 | Opt-in live suite (RM-052) | Not run | — |
 | MCP Inspector re-check (RM-053) | Not run | — |

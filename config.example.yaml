@@ -4,7 +4,7 @@ host: 127.0.0.1
 port: 8000
 default_profile: 32k
 profiles:
-  4k: {model: SET_FROM_OLLAMA_LIST, context_tokens: 4096}
+  4k: {model: SET_FROM_OLLAMA_LIST, context_tokens: 4096, completion_tokens: 1024}
   32k: {model: SET_FROM_OLLAMA_LIST, context_tokens: 32768}
   128k: {model: SET_FROM_OLLAMA_LIST, context_tokens: 131072}
   256k: {model: SET_FROM_OLLAMA_LIST, context_tokens: 262144}

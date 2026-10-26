@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import time
+import uuid
 from collections import defaultdict, deque
 from contextvars import ContextVar
 from urllib.parse import urlsplit
@@ -16,6 +17,9 @@ from .errors import SecondBrainError
 _current_principal: ContextVar[str | None] = ContextVar(
     "second_brain_principal", default=None
 )
+_current_request_id: ContextVar[str | None] = ContextVar(
+    "second_brain_request_id", default=None
+)
 
 
 def current_principal() -> str:
@@ -23,6 +27,10 @@ def current_principal() -> str:
     if not principal:
         raise SecondBrainError("unauthorized")
     return principal
+
+
+def current_request_id() -> str:
+    return _current_request_id.get() or "unknown"
 
 
 class LocalAuthMiddleware:
@@ -48,6 +56,22 @@ class LocalAuthMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        request_id = uuid.uuid4().hex
+        request_token = _current_request_id.set(request_id)
+
+        async def correlated_send(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.append((b"x-request-id", request_id.encode("ascii")))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        try:
+            await self._handle_http(scope, receive, correlated_send)
+        finally:
+            _current_request_id.reset(request_token)
+
+    async def _handle_http(self, scope: Scope, receive: Receive, send: Send) -> None:
         headers = {
             key.decode("latin-1").lower(): value.decode("latin-1")
             for key, value in scope.get("headers", [])

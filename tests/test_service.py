@@ -6,7 +6,13 @@ import pytest
 from second_brain_mcp.errors import OllamaError
 from second_brain_mcp.ollama import OllamaClient
 from second_brain_mcp.prompts import MODE_PROMPTS, system_prompt
-from second_brain_mcp.service import SecondBrainService, ServiceError
+from second_brain_mcp.service import (
+    MESSAGE_OVERHEAD_TOKENS,
+    PROMPT_OVERHEAD_TOKENS,
+    SecondBrainService,
+    ServiceError,
+    _estimate_messages,
+)
 from second_brain_mcp.store import ConversationStore, Turn
 
 
@@ -15,6 +21,15 @@ def test_each_mode_has_distinct_instruction(mode: str) -> None:
     prompt = system_prompt(mode)
     assert f"Mode: {mode}." in prompt
     assert MODE_PROMPTS[mode] in prompt
+
+
+def test_prompt_estimator_counts_named_framing_overhead() -> None:
+    messages = ["short", "question"]
+    assert _estimate_messages(messages) == (
+        sum(len(text.encode()) for text in messages)
+        + len(messages) * MESSAGE_OVERHEAD_TOKENS
+        + PROMPT_OVERHEAD_TOKENS
+    )
 
 
 @pytest.mark.asyncio
@@ -108,8 +123,44 @@ def test_context_budget_trims_old_pairs_and_rejects_large_current_input(
     )
     assert trimmed is True
     assert len(messages) == 2
-    with pytest.raises(ServiceError, match="prompt budget"):
+    with pytest.raises(ServiceError, match='try model_profile "32k"'):
+        service._build_messages([], "x" * 3000, None, "discuss", 4096, 1024)
+    with pytest.raises(ServiceError, match='try model_profile "32k"'):
         service._build_messages([], "x" * 5000, None, "discuss", 4096)
+    with pytest.raises(ServiceError) as exc_info:
+        service._build_messages([], "x" * 300_000, None, "discuss", 262144)
+    assert "about" in str(exc_info.value)
+    assert "try model_profile" not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_completion_override_is_used_for_generation_and_budget(
+    app_config: Any,
+) -> None:
+    app_config.profiles["32k"].completion_tokens = 512
+    app_config.allowed_models["other:tag"].completion_tokens = 256
+    payloads = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags":
+            return httpx.Response(
+                200,
+                json={"models": [{"name": "qwen:32k"}, {"name": "other:tag"}]},
+            )
+        payloads.append(__import__("json").loads(await request.aread()))
+        return httpx.Response(200, json={"message": {"content": "ok"}})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama.test"
+    ) as http:
+        service = SecondBrainService(
+            app_config,
+            OllamaClient(app_config, http),
+            ConversationStore(app_config.database_path),
+        )
+        await service.ask("codex", "hello", model_profile="32k")
+        await service.ask("codex", "direct", model="other:tag")
+    assert [payload["options"]["num_predict"] for payload in payloads] == [512, 256]
 
 
 @pytest.mark.asyncio
@@ -550,14 +601,14 @@ async def test_later_continuation_reads_selection_after_lock(
     switched_chat_started = asyncio.Event()
     release_switch = asyncio.Event()
 
-    async def controlled_chat(model, messages, context):
+    async def controlled_chat(model, messages, context, completion_tokens=None):
         if (
             model == app_config.profiles["128k"].model
             and not switched_chat_started.is_set()
         ):
             switched_chat_started.set()
             await release_switch.wait()
-        return await original_chat(model, messages, context)
+        return await original_chat(model, messages, context, completion_tokens)
 
     service.ollama.chat = controlled_chat
     switched = asyncio.create_task(

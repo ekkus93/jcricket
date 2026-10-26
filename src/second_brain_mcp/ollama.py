@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -13,6 +14,7 @@ from .config import AppConfig
 from .errors import OllamaError
 
 MAX_LISTED_MODELS = 200
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -45,7 +47,11 @@ class OllamaClient:
             await self._client.aclose()
 
     async def chat(
-        self, model: str, messages: list[dict[str, str]], context: int
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        context: int,
+        completion_tokens: int | None = None,
     ) -> ChatResult:
         try:
             response = await self._client.post(
@@ -57,7 +63,8 @@ class OllamaClient:
                     "think": False,
                     "options": {
                         "num_ctx": context,
-                        "num_predict": self.config.limits.completion_tokens,
+                        "num_predict": completion_tokens
+                        or self.config.limits.completion_tokens,
                     },
                 },
             )
@@ -69,10 +76,33 @@ class OllamaClient:
             answer = answer.strip()
             if len(answer.encode("utf-8")) > self.config.limits.response_bytes:
                 raise OllamaError("ollama_bad_response")
+            prompt_tokens = _optional_int(payload.get("prompt_eval_count"))
+            completion_count = _optional_int(payload.get("eval_count"))
+            estimate = (
+                sum(len(item["content"].encode("utf-8")) + 8 for item in messages) + 16
+            )
+            if prompt_tokens is not None and prompt_tokens > estimate:
+                logger.warning(
+                    "category=estimate_exceeded estimate=%d prompt_tokens=%d",
+                    estimate,
+                    prompt_tokens,
+                )
+            if (
+                prompt_tokens is not None
+                and completion_count is not None
+                and prompt_tokens + completion_count >= context
+            ):
+                logger.warning(
+                    "category=context_saturated prompt_tokens=%d "
+                    "completion_tokens=%d context_tokens=%d",
+                    prompt_tokens,
+                    completion_count,
+                    context,
+                )
             return ChatResult(
                 answer=answer,
-                prompt_tokens=_optional_int(payload.get("prompt_eval_count")),
-                completion_tokens=_optional_int(payload.get("eval_count")),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_count,
                 elapsed_ms=_duration_ms(payload),
             )
         except httpx.TimeoutException as exc:

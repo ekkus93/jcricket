@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -18,7 +20,7 @@ class Usage(OutputModel):
 class AskResponse(OutputModel):
     answer: str
     conversation_id: str
-    mode: str
+    mode: Literal["discuss", "brainstorm", "critic", "review", "solve"]
     model_profile: str | None
     model: str
     context_limit_tokens: int

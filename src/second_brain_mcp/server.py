@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from contextlib import asynccontextmanager
 from time import monotonic
+from typing import Literal
 
 import uvicorn
 from mcp.server.fastmcp import Context, FastMCP
@@ -13,7 +15,7 @@ from mcp.types import ToolAnnotations
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 
-from .auth import LocalAuthMiddleware, current_principal
+from .auth import LocalAuthMiddleware, current_principal, current_request_id
 from .config import AppConfig
 from .errors import SecondBrainError
 from .ollama import OllamaClient
@@ -84,13 +86,15 @@ def create_app(config: AppConfig) -> Starlette:
         question: str,
         context: str | None = None,
         conversation_id: str | None = None,
-        mode: str = "discuss",
-        model_profile: str | None = None,
+        mode: Literal["discuss", "brainstorm", "critic", "review", "solve"] = "discuss",
+        model_profile: Literal["4k", "32k", "128k", "256k"] | None = None,
         model: str | None = None,
     ) -> AskResponse:
-        request_id = ctx.request_id
+        request_id = current_request_id()
+        rpc_id = str(ctx.request_id)
         principal = "unknown"
         started = monotonic()
+        conversation_hash = _conversation_hash(conversation_id)
         try:
             principal = current_principal()
             result = await service.ask(
@@ -104,34 +108,66 @@ def create_app(config: AppConfig) -> Starlette:
             )
         except SecondBrainError as exc:
             logger.error(
-                "request_id=%s tool=ask_second_brain principal=%s "
-                "status=error category=%s",
+                "request_id=%s rpc_id=%s tool=ask_second_brain principal=%s "
+                "status=error category=%s mode=%s profile=%s model=%s "
+                "context_limit_tokens=%s history_trimmed=%s elapsed_ms=%s "
+                "prompt_tokens=%s completion_tokens=%s conversation_id_hash=%s",
                 request_id,
+                rpc_id,
                 principal,
                 exc.code,
+                mode,
+                model_profile or "-",
+                model or "-",
+                "-",
+                "-",
+                round((monotonic() - started) * 1000),
+                "-",
+                "-",
+                conversation_hash,
             )
             raise
         except Exception as exc:
             logger.debug("unexpected ask_second_brain failure", exc_info=True)
             logger.error(
-                "request_id=%s tool=ask_second_brain principal=%s "
-                "status=error category=internal_error error_type=%s",
+                "request_id=%s rpc_id=%s tool=ask_second_brain principal=%s "
+                "status=error category=internal_error error_type=%s mode=%s "
+                "profile=%s model=%s context_limit_tokens=%s history_trimmed=%s "
+                "elapsed_ms=%s prompt_tokens=%s completion_tokens=%s "
+                "conversation_id_hash=%s",
                 request_id,
+                rpc_id,
                 principal,
                 type(exc).__name__,
+                mode,
+                model_profile or "-",
+                model or "-",
+                "-",
+                "-",
+                round((monotonic() - started) * 1000),
+                "-",
+                "-",
+                conversation_hash,
             )
             raise SecondBrainError("internal_error") from exc
         usage = result["usage"]
         logger.info(
-            "request_id=%s tool=ask_second_brain principal=%s status=ok "
-            "mode=%s profile=%s elapsed_ms=%s prompt_tokens=%s completion_tokens=%s",
+            "request_id=%s rpc_id=%s tool=ask_second_brain principal=%s status=ok "
+            "category=- mode=%s profile=%s model=%s context_limit_tokens=%s "
+            "history_trimmed=%s elapsed_ms=%s prompt_tokens=%s completion_tokens=%s "
+            "conversation_id_hash=%s",
             request_id,
+            rpc_id,
             principal,
             mode,
             result["model_profile"],
+            result["model"],
+            result["context_limit_tokens"],
+            result["history_trimmed"],
             round((monotonic() - started) * 1000),
             usage["prompt_tokens"],
             usage["completion_tokens"],
+            _conversation_hash(result["conversation_id"]),
         )
         return AskResponse.model_validate(result)
 
@@ -150,7 +186,8 @@ def create_app(config: AppConfig) -> Starlette:
         structured_output=True,
     )
     async def list_models(ctx: Context) -> ModelInventory:
-        request_id = ctx.request_id
+        request_id = current_request_id()
+        rpc_id = str(ctx.request_id)
         principal = "unknown"
         started = monotonic()
         try:
@@ -158,29 +195,41 @@ def create_app(config: AppConfig) -> Starlette:
             inventory = await ollama.models()
         except SecondBrainError as exc:
             logger.error(
-                "request_id=%s tool=list_models principal=%s status=error category=%s",
+                "request_id=%s rpc_id=%s tool=list_models principal=%s status=error "
+                "category=%s mode=- profile=- model=- context_limit_tokens=- "
+                "history_trimmed=- elapsed_ms=%s prompt_tokens=- completion_tokens=- "
+                "conversation_id_hash=-",
                 request_id,
+                rpc_id,
                 principal,
                 exc.code,
+                round((monotonic() - started) * 1000),
             )
             raise
         except Exception as exc:
             logger.debug("unexpected list_models failure", exc_info=True)
             logger.error(
-                "request_id=%s tool=list_models principal=%s "
-                "status=error category=internal_error error_type=%s",
+                "request_id=%s rpc_id=%s tool=list_models principal=%s "
+                "status=error category=internal_error error_type=%s mode=- profile=- "
+                "model=- context_limit_tokens=- history_trimmed=- elapsed_ms=%s "
+                "prompt_tokens=- completion_tokens=- conversation_id_hash=-",
                 request_id,
+                rpc_id,
                 principal,
                 type(exc).__name__,
+                round((monotonic() - started) * 1000),
             )
             raise SecondBrainError("internal_error") from exc
         logger.info(
-            "request_id=%s tool=list_models principal=%s status=ok "
-            "model_count=%d elapsed_ms=%d",
+            "request_id=%s rpc_id=%s tool=list_models principal=%s status=ok "
+            "category=- mode=- profile=- model=- context_limit_tokens=- "
+            "history_trimmed=- elapsed_ms=%d prompt_tokens=- completion_tokens=- "
+            "conversation_id_hash=- model_count=%d",
             request_id,
+            rpc_id,
             principal,
-            len(inventory["models"]),
             round((monotonic() - started) * 1000),
+            len(inventory["models"]),
         )
         return ModelInventory.model_validate(inventory)
 
@@ -209,6 +258,12 @@ def create_app(config: AppConfig) -> Starlette:
     app.state.service = service
     app.state.ollama = ollama
     return app
+
+
+def _conversation_hash(conversation_id: str | None) -> str:
+    if not conversation_id:
+        return "-"
+    return hashlib.sha256(conversation_id.encode("utf-8")).hexdigest()[:8]
 
 
 def run(config: AppConfig) -> None:

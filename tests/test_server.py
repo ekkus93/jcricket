@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 from pathlib import Path
 
@@ -40,6 +41,16 @@ def test_only_two_mcp_tools_and_expected_arguments(tmp_path: Path, monkeypatch) 
         "model_profile",
         "model",
     }
+    assert ask.parameters["properties"]["mode"]["enum"] == [
+        "discuss",
+        "brainstorm",
+        "critic",
+        "review",
+        "solve",
+    ]
+    profile_schema = ask.parameters["properties"]["model_profile"]
+    profile_enum = profile_schema.get("enum") or profile_schema["anyOf"][0]["enum"]
+    assert profile_enum == ["4k", "32k", "128k", "256k"]
 
 
 @pytest.mark.parametrize(
@@ -137,6 +148,14 @@ def test_auth_is_required_for_mcp_and_health_is_minimal(
         )
         assert denied.status_code == 401
         assert denied.json()["error"] == "authentication required"
+        assert len(denied.headers["x-request-id"]) == 32
+        forbidden = client.post(
+            "/mcp",
+            json={},
+            headers={"Host": "example.invalid", "Origin": "http://example.invalid"},
+        )
+        assert forbidden.status_code == 403
+        assert len(forbidden.headers["x-request-id"]) == 32
 
 
 def test_authentication_maps_separate_tokens_to_principals(
@@ -217,6 +236,7 @@ def test_malformed_authorization_headers_return_401(
             },
         )
     assert response.status_code == 401
+    assert len(response.headers["x-request-id"]) == 32
 
 
 def test_bearer_scheme_is_case_insensitive(tmp_path: Path, monkeypatch) -> None:
@@ -234,6 +254,119 @@ def test_bearer_scheme_is_case_insensitive(tmp_path: Path, monkeypatch) -> None:
             },
         )
     assert response.status_code == 200, response.text
+    assert len(response.headers["x-request-id"]) == 32
+
+
+def test_request_ids_are_server_generated_for_same_rpc_id(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    with TestClient(_configured_app(tmp_path)) as client:
+        client.app.state.ollama.models = _fake_models
+        headers = {
+            "Authorization": "Bearer " + "c" * 32,
+            "Host": "127.0.0.1",
+            "Origin": "http://127.0.0.1",
+            "Accept": "application/json, text/event-stream",
+        }
+        request = {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/list",
+            "params": {},
+        }
+        first = client.post("/mcp", json=request, headers=headers)
+        second = client.post("/mcp", json=request, headers=headers)
+    assert first.status_code == second.status_code == 200
+    assert first.headers["x-request-id"] != second.headers["x-request-id"]
+
+
+def test_mcp_rejects_mode_outside_published_enum(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    with TestClient(_configured_app(tmp_path)) as client:
+        response = client.post(
+            "/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 8,
+                "method": "tools/call",
+                "params": {
+                    "name": "ask_second_brain",
+                    "arguments": {"question": "hello", "mode": "unsafe"},
+                },
+            },
+            headers={
+                "Authorization": "Bearer " + "c" * 32,
+                "Host": "127.0.0.1",
+                "Origin": "http://127.0.0.1",
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["result"]["isError"] is True
+
+
+def test_tool_logs_are_correlatable_and_do_not_contain_content(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "token-marker-" + "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    caplog.set_level(logging.INFO)
+    app = _configured_app(tmp_path)
+
+    async def ask(*args, **kwargs):
+        return {
+            "answer": "answer-marker",
+            "conversation_id": "conversation-marker",
+            "mode": "discuss",
+            "model_profile": "32k",
+            "model": "qwen:32k",
+            "context_limit_tokens": 32768,
+            "history_trimmed": False,
+            "usage": {
+                "prompt_tokens": 123,
+                "completion_tokens": 45,
+                "elapsed_ms": 10,
+            },
+        }
+
+    app.state.service.ask = ask
+    with TestClient(app) as client:
+        client.post(
+            "/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "ask_second_brain",
+                    "arguments": {
+                        "question": "question-marker",
+                        "context": "context-marker",
+                    },
+                },
+            },
+            headers={
+                "Authorization": "Bearer token-marker-" + "c" * 32,
+                "Host": "127.0.0.1",
+                "Origin": "http://127.0.0.1",
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+    records = "\n".join(record.getMessage() for record in caplog.records)
+    for marker in (
+        "question-marker",
+        "context-marker",
+        "answer-marker",
+        "token-marker-",
+        "conversation-marker",
+    ):
+        assert marker not in records
+    assert "model=qwen:32k" in records
+    assert "conversation_id_hash=" in records
+    assert "request_id=" in records
 
 
 @pytest.mark.asyncio

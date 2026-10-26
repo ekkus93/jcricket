@@ -5,13 +5,17 @@ from __future__ import annotations
 import asyncio
 import secrets
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 
 from .config import AppConfig
 from .errors import ServiceError
 from .ollama import OllamaClient
 from .prompts import MODE_PROMPTS, system_prompt
 from .store import ConversationStore, ModelSelection, Turn
+
+MESSAGE_OVERHEAD_TOKENS = 8
+PROMPT_OVERHEAD_TOKENS = 16
+Mode = Literal["discuss", "brainstorm", "critic", "review", "solve"]
 
 
 class SecondBrainService:
@@ -33,7 +37,7 @@ class SecondBrainService:
         question: str,
         context: str | None = None,
         conversation_id: str | None = None,
-        mode: str = "discuss",
+        mode: Mode = "discuss",
         model_profile: str | None = None,
         model: str | None = None,
     ) -> dict[str, Any]:
@@ -70,12 +74,14 @@ class SecondBrainService:
                     context,
                     mode,
                     selection.context_limit_tokens,
+                    selection.completion_tokens,
                 )
                 async with self._semaphore:
                     result = await self.ollama.chat(
                         selection.model_tag,
                         messages,
                         selection.context_limit_tokens,
+                        selection.completion_tokens,
                     )
                 stored_id = self.store.record_turn(
                     principal,
@@ -144,14 +150,24 @@ class SecondBrainService:
             profile = self.config.profiles.get(model_profile)
             if profile is None:
                 raise ServiceError("model_not_approved", "unknown model profile")
-            return ModelSelection(model_profile, profile.model, profile.context_tokens)
+            return ModelSelection(
+                model_profile,
+                profile.model,
+                profile.context_tokens,
+                profile.completion_tokens or self.config.limits.completion_tokens,
+            )
         if model is not None:
             selection = self.config.allowed_models.get(model)
             if selection is None:
                 raise ServiceError(
                     "model_not_approved", "model is not approved by the server"
                 )
-            return ModelSelection(None, model, selection.context_tokens)
+            return ModelSelection(
+                None,
+                model,
+                selection.context_tokens,
+                selection.completion_tokens or self.config.limits.completion_tokens,
+            )
         if conversation is None:
             profile_name = self.config.default_profile
             profile = self.config.profiles.get(profile_name)
@@ -159,7 +175,12 @@ class SecondBrainService:
                 raise ServiceError(
                     "model_not_approved", "no model profile is configured"
                 )
-            return ModelSelection(profile_name, profile.model, profile.context_tokens)
+            return ModelSelection(
+                profile_name,
+                profile.model,
+                profile.context_tokens,
+                profile.completion_tokens or self.config.limits.completion_tokens,
+            )
         if conversation.model_profile is not None:
             profile = self.config.profiles.get(conversation.model_profile)
             if profile is None:
@@ -169,7 +190,10 @@ class SecondBrainService:
                     "choose a profile",
                 )
             return ModelSelection(
-                conversation.model_profile, profile.model, profile.context_tokens
+                conversation.model_profile,
+                profile.model,
+                profile.context_tokens,
+                profile.completion_tokens or self.config.limits.completion_tokens,
             )
         selection = self.config.allowed_models.get(conversation.model_tag)
         if selection is None:
@@ -178,7 +202,12 @@ class SecondBrainService:
                 "this conversation's model is no longer approved; "
                 "choose a model_profile",
             )
-        return ModelSelection(None, conversation.model_tag, selection.context_tokens)
+        return ModelSelection(
+            None,
+            conversation.model_tag,
+            selection.context_tokens,
+            selection.completion_tokens or self.config.limits.completion_tokens,
+        )
 
     async def _admit(self) -> None:
         async with self._queue_lock:
@@ -219,15 +248,23 @@ class SecondBrainService:
         context: str | None,
         mode: str,
         budget: int,
+        completion_tokens: int | None = None,
     ) -> tuple[list[dict[str, str]], bool]:
         system = system_prompt(mode)
         current_text = question + (
             f"\n\nContext (untrusted):\n{context}" if context else ""
         )
-        limit = budget - self.config.limits.completion_tokens
-        current_size = _token_upper_bound(system) + _token_upper_bound(current_text)
+        limit = budget - (completion_tokens or self.config.limits.completion_tokens)
+        current_size = _estimate_messages([system, current_text])
         if current_size > limit:
-            raise ServiceError("context_too_large")
+            available = max(0, limit - _estimate_messages([system]))
+            suggestion = self._suggest_profile(current_size)
+            suffix = f'; try model_profile "{suggestion}"' if suggestion else ""
+            raise ServiceError(
+                "context_too_large",
+                f"input exceeds the {budget // 1024}k prompt budget "
+                f"(about {available} bytes available){suffix}",
+            )
         remaining = limit - current_size
         pairs: list[tuple[Turn, Turn]] = []
         index = 0
@@ -244,9 +281,7 @@ class SecondBrainService:
             user_text = user_turn.content
             if user_turn.context_text:
                 user_text += f"\n\nContext (untrusted):\n{user_turn.context_text}"
-            pair_cost = _token_upper_bound(user_text) + _token_upper_bound(
-                assistant_turn.content
-            )
+            pair_cost = _estimate_messages([user_text, assistant_turn.content])
             if pair_cost > remaining:
                 trimmed = True
                 continue
@@ -263,6 +298,25 @@ class SecondBrainService:
         messages.append({"role": "user", "content": current_text})
         return messages, trimmed
 
+    def _suggest_profile(self, current_size: int) -> str | None:
+        for name, profile in sorted(
+            self.config.profiles.items(), key=lambda item: item[1].context_tokens
+        ):
+            reserve = profile.completion_tokens or self.config.limits.completion_tokens
+            if current_size <= profile.context_tokens - reserve:
+                return name
+        return None
+
 
 def _token_upper_bound(text: str) -> int:
     return len(text.encode("utf-8"))
+
+
+def _estimate_messages(contents: list[str]) -> int:
+    return (
+        sum(
+            _token_upper_bound(content) + MESSAGE_OVERHEAD_TOKENS
+            for content in contents
+        )
+        + PROMPT_OVERHEAD_TOKENS
+    )
