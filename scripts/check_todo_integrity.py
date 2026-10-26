@@ -13,6 +13,7 @@ BASELINES = (
     ("docs/TODO.md", "5f245be"),
     ("docs/REMEDIATION_TODO.md", "ca3a444"),
     ("docs/REMEDIATION_2_TODO.md", "54e4554"),
+    ("docs/TEST_COVERAGE_TODO.md", "c4eb4f1"),
 )
 
 ITEM = re.compile(r"^- \[[ xX]\] \*\*(?P<id>[A-Za-z0-9-]+)\*\* (?P<text>.*)$")
