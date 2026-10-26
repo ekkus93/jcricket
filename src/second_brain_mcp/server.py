@@ -10,8 +10,10 @@ from typing import Literal
 
 import uvicorn
 from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import ToolAnnotations
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import ValidationError
 from starlette.applications import Starlette
 
 from .auth import LocalAuthMiddleware, current_principal, current_request_id
@@ -25,13 +27,58 @@ from .store import ConversationStore
 logger = logging.getLogger(__name__)
 
 
+class SecondBrainMCP(FastMCP):
+    """FastMCP server that returns tool errors as exactly ``<code>: <message>``."""
+
+    async def call_tool(self, name, arguments):
+        try:
+            return await super().call_tool(name, arguments)
+        except ToolError as exc:
+            code, text = _tool_error(exc)
+            if not isinstance(exc.__cause__, SecondBrainError):
+                logger.log(
+                    logging.ERROR if code == "internal_error" else logging.INFO,
+                    "request_id=%s tool=%s status=error category=%s",
+                    current_request_id(),
+                    name,
+                    code,
+                )
+            return CallToolResult(
+                content=[TextContent(type="text", text=text)], isError=True
+            )
+
+
+def _tool_error(exc: ToolError) -> tuple[str, str]:
+    cause = exc.__cause__
+    if isinstance(cause, SecondBrainError):
+        return cause.code, str(cause)
+    if isinstance(cause, ValidationError) and cause.title.endswith("Arguments"):
+        fields = sorted(
+            {str(error["loc"][0]) for error in cause.errors() if error.get("loc")}
+        )
+        message = (
+            "invalid value for " + ", ".join(fields)
+            if fields
+            else "the request is invalid"
+        )
+        return "invalid_input", f"invalid_input: {message}"
+    if cause is None and str(exc).startswith("Unknown tool"):
+        return "invalid_input", "invalid_input: unknown tool"
+    logger.error(
+        "request_id=%s unexpected_error_type=%s",
+        current_request_id(),
+        type(cause or exc).__name__,
+    )
+    return "internal_error", str(SecondBrainError("internal_error"))
+
+
 def create_app(config: AppConfig) -> Starlette:
     credentials = config.credentials()
     ollama = OllamaClient(config)
     service = SecondBrainService(
         config, ollama, ConversationStore(config.database_path)
     )
-    mcp = FastMCP(
+    mcp = SecondBrainMCP(
         "Second Brain",
         debug=False,
         log_level=config.log_level,
@@ -112,6 +159,7 @@ def create_app(config: AppConfig) -> Starlette:
                 model_profile,
                 model,
             )
+            response = AskResponse.model_validate(result)
         except SecondBrainError as exc:
             logger.error(
                 "request_id=%s rpc_id=%s tool=ask_second_brain principal=%s "
@@ -179,7 +227,7 @@ def create_app(config: AppConfig) -> Starlette:
             usage["completion_tokens"],
             _conversation_hash(result["conversation_id"]),
         )
-        return AskResponse.model_validate(result)
+        return response
 
     @mcp.tool(
         description=(
@@ -202,7 +250,7 @@ def create_app(config: AppConfig) -> Starlette:
         started = monotonic()
         try:
             principal = current_principal()
-            inventory = await ollama.models()
+            inventory = ModelInventory.model_validate(await ollama.models())
         except SecondBrainError as exc:
             logger.error(
                 "request_id=%s rpc_id=%s tool=list_models principal=%s status=error "
@@ -244,7 +292,7 @@ def create_app(config: AppConfig) -> Starlette:
             principal,
             round((monotonic() - started) * 1000),
         )
-        return ModelInventory.model_validate(inventory)
+        return inventory
 
     app = mcp.streamable_http_app()
     mcp_lifespan = app.router.lifespan_context
