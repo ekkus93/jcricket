@@ -82,9 +82,12 @@
   - Evidence (fail first): on unfixed code `test_example_config_fails_only_on_placeholders` and `test_example_config_with_real_tags_loads[tags0]` (one shared tag) failed, as did the new placeholder and allowed-model sharing tests (5 failed).
   - Evidence (after fix): `config.py` drops the profile-vs-profile rule, checks allowed-model budgets against the set of profile budgets for the tag, and rejects `SET_FROM_OLLAMA_LIST` / `REPLACE_WITH_*` tags. All 22 tests in `tests/unit/test_config.py` pass; full suite 169 passed, 1 skipped. The private workstation `config.yaml` still loads.
   - Note: the matching `REMEDIATION_SPEC.md` R-35 amendment and owner-decision record are RM2-031.
-- [ ] **RM2-015** Make every `second-brain` command print configuration and credential errors to stderr and exit 1 without a traceback (R2-17).
+- [x] **RM2-015** Make every `second-brain` command print configuration and credential errors to stderr and exit 1 without a traceback (R2-17).
   - Test: a parametrized CLI test runs `check-config` with one invalid config per R-35 rule plus the placeholder rule, and with a missing token env var; each exits 1, stderr has the message, and stderr has no `Traceback`.
   - Evidence required: the test fails on `ad85cdb` (traceback).
+  - Evidence (fail first): `test_check_config_reports_errors_without_traceback` on unfixed code: 8 failed, each with `Traceback (most recent call last)` in stderr.
+  - Evidence (after fix): `cli.main` catches `ValueError` from `load_config` and `credentials()` (for `check-config` and `serve`), prints `second-brain: <message>` to stderr and exits 1. All 8 cases pass (log level, completion ≥ context, too little prompt budget, conflicting allowed budget, inventory cache range, token env name, placeholder, missing token env var); full suite 177 passed, 1 skipped.
+  - Note: admin `conversations` commands also report invalid configuration this way; they do not check credentials, by design (R-38).
 
 ### Credentials and deployment
 

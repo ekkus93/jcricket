@@ -1,5 +1,8 @@
 import json
+import os
 import stat
+import subprocess
+import sys
 from argparse import Namespace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -185,3 +188,64 @@ def test_delete_requires_an_existing_id(tmp_path: Path) -> None:
     )
     with pytest.raises(SystemExit, match="conversation not found"):
         _conversations(tmp_path / "db.sqlite3", args)
+
+
+VALID_PROFILES = """profiles:
+  4k: {model: a, context_tokens: 4096}
+  32k: {model: b, context_tokens: 32768}
+  128k: {model: c, context_tokens: 131072}
+  256k: {model: d, context_tokens: 262144}
+token_env: {codex: CLI_CODEX_TOKEN, claude-code: CLI_CLAUDE_TOKEN}
+"""
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [
+        ("log_level: LOUD\n", "log_level must be"),
+        ("allowed_models: {x: 1024}\n", "completion_tokens must be less than"),
+        ("allowed_models: {x: 2400}\n", "leaves too little prompt budget"),
+        ("allowed_models: {b: 8192}\n", "different allowed-model budget"),
+        ("limits: {inventory_cache_seconds: 301}\n", "inventory_cache_seconds"),
+        (
+            "token_env: {codex: bad-name, claude-code: CLI_CLAUDE_TOKEN}\n",
+            "token_env values must be environment variable names",
+        ),
+        (
+            "allowed_models: {REPLACE_WITH_TAG: 8192}\n",
+            "model tag placeholders must be replaced",
+        ),
+        ("", "missing environment variables for configured principals"),
+    ],
+)
+def test_check_config_reports_errors_without_traceback(
+    tmp_path: Path, extra: str, message: str
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    body = VALID_PROFILES
+    if extra.startswith("token_env:"):
+        body = body.replace(
+            "token_env: {codex: CLI_CODEX_TOKEN, claude-code: CLI_CLAUDE_TOKEN}\n", ""
+        )
+    config_path.write_text(body + extra, encoding="utf-8")
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"CLI_CODEX_TOKEN", "CLI_CLAUDE_TOKEN"}
+    }
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "second_brain_mcp.cli",
+            "--config",
+            str(config_path),
+            "check-config",
+        ],
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    assert result.returncode == 1
+    assert message in result.stderr
+    assert "Traceback" not in result.stderr

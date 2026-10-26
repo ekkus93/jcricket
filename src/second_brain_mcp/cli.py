@@ -41,9 +41,14 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = _parser().parse_args()
-    config = load_config(args.config)
+    try:
+        config = load_config(args.config)
+        if args.command in {"check-config", "serve"}:
+            config.credentials()
+    except ValueError as exc:
+        print(f"second-brain: {exc}", file=sys.stderr)
+        raise SystemExit(1) from None
     if args.command == "check-config":
-        config.credentials()
         print("Configuration is valid.")
     elif args.command == "conversations":
         _conversations(config, args)
