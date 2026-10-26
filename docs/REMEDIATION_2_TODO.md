@@ -66,9 +66,11 @@
   - Evidence required: the uneven-size test fails on `ad85cdb` (the oldest pair is included).
   - Evidence (fail first): `test_trimming_stops_at_first_pair_that_does_not_fit` on unfixed code: `AssertionError … At index 0 diff: 'oldest-user' != 'newest-user'`.
   - Evidence (after fix): `service.py` trimming loop now `break`s at the first pair that does not fit. `test_trimming_stops_at_first_pair_that_does_not_fit` and `test_fully_fitting_history_keeps_exact_order` pass; full suite 161 passed, 1 skipped.
-- [ ] **RM2-013** Name the budget correctly in `context_too_large` (`the <profile> prompt budget` / `the <N>-token prompt budget`) (R2-13).
+- [x] **RM2-013** Name the budget correctly in `context_too_large` (`the <profile> prompt budget` / `the <N>-token prompt budget`) (R2-13).
   - Test: a 6000-token direct model produces `the 6000-token prompt budget`; `4k` produces `the 4k prompt budget`.
   - Evidence required: the direct-model test fails on `ad85cdb` (`5k`).
+  - Evidence (fail first): `test_context_too_large_names_direct_model_token_budget` on unfixed code: input was `context_too_large: input exceeds the 5k prompt budget …`.
+  - Evidence (after fix): `_build_messages` takes the selection's profile name; the message says `the <profile> prompt budget` or `the <N>-token prompt budget`. Both `test_context_too_large_names_*` tests pass; full suite 163 passed, 1 skipped.
 
 ### Configuration
 

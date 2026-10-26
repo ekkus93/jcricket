@@ -75,6 +75,7 @@ class SecondBrainService:
                     mode,
                     selection.context_limit_tokens,
                     selection.completion_tokens,
+                    selection.model_profile,
                 )
                 async with self._semaphore:
                     result = await self.ollama.chat(
@@ -249,6 +250,7 @@ class SecondBrainService:
         mode: str,
         budget: int,
         completion_tokens: int | None = None,
+        profile: str | None = None,
     ) -> tuple[list[dict[str, str]], bool]:
         system = system_prompt(mode)
         current_text = question + (
@@ -262,7 +264,7 @@ class SecondBrainService:
             suffix = f'; try model_profile "{suggestion}"' if suggestion else ""
             raise ServiceError(
                 "context_too_large",
-                f"input exceeds the {budget // 1024}k prompt budget "
+                f"input exceeds the {profile or f'{budget}-token'} prompt budget "
                 f"(about {available} bytes available){suffix}",
             )
         remaining = limit - current_size

@@ -3,6 +3,7 @@ from typing import Any
 import httpx
 import pytest
 
+from second_brain_mcp.config import AllowedModel
 from second_brain_mcp.errors import OllamaError
 from second_brain_mcp.ollama import OllamaClient
 from second_brain_mcp.prompts import BASE_PROMPT, MODE_PROMPTS, system_prompt
@@ -953,3 +954,30 @@ def test_fully_fitting_history_keeps_exact_order(
         ("assistant", "second-assistant"),
         ("user", "current"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_context_too_large_names_direct_model_token_budget(
+    app_config: Any, mock_ollama: httpx.AsyncClient
+) -> None:
+    app_config.allowed_models["other:tag"] = AllowedModel(context_tokens=6000)
+    service = SecondBrainService(
+        app_config,
+        OllamaClient(app_config, mock_ollama),
+        ConversationStore(app_config.database_path),
+    )
+    with pytest.raises(ServiceError, match="the 6000-token prompt budget"):
+        await service.ask("codex", "x" * 5000, model="other:tag")
+
+
+@pytest.mark.asyncio
+async def test_context_too_large_names_profile_budget(
+    app_config: Any, mock_ollama: httpx.AsyncClient
+) -> None:
+    service = SecondBrainService(
+        app_config,
+        OllamaClient(app_config, mock_ollama),
+        ConversationStore(app_config.database_path),
+    )
+    with pytest.raises(ServiceError, match="the 4k prompt budget"):
+        await service.ask("codex", "x" * 5000, model_profile="4k")
