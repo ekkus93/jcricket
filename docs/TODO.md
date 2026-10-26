@@ -1,6 +1,6 @@
 # Second Brain MCP — Implementation TODO
 
-**Status:** In progress — local v0.1 implemented. Open: SB-002 (spec files not at repository root), SB-040 (dropped by owner decision 2026-10-26), SB-041–SB-046 and SB-054 (blocked: no remote endpoint or ChatGPT workspace), SB-052 and SB-053 (need live client re-runs on current code, including restart), SB-062 (no systemd host), SB-063 (ChatGPT guide blocked); SB-100–SB-107 deferred. Round-2 remediation is in progress in `docs/REMEDIATION_2_TODO.md`.
+**Status:** In progress — local v0.1 implemented. Open: SB-002 (spec files not at repository root), SB-040 (dropped by owner decision 2026-10-26), SB-041–SB-046 and SB-054 (blocked: no remote endpoint or ChatGPT workspace), SB-052 (needs a live Codex re-run on current code, including restart), SB-062 (no systemd host), SB-063 (ChatGPT guide blocked); SB-100–SB-107 deferred. Round-2 remediation is in progress in `docs/REMEDIATION_2_TODO.md`.
 **Date:** 2026-10-25  
 **Reference:** [SPEC.md](SPEC.md)  
 **Repository:** `ekkus93/jcricket` (working tree implementation in progress)
@@ -112,9 +112,11 @@
 - [ ] **SB-052** Configure Codex to use local HTTP MCP; confirm both-tool discovery, `list_models` results, first question, follow-up using returned ID, and persistence across restart.
   - Evidence: recorded live Codex run listed profiles and made two `ask_second_brain` calls; the follow-up used the returned ID.
   - Note: unchecked after restoring the original text. The record shows restart persistence as a separate server-level check, not through Codex, and both-tool discovery is not recorded explicitly. The local server (started 2026-10-25 22:42) also predates the round-1 fixes. Needs a live Codex re-run against current code, including a server restart.
-- [ ] **SB-053** Configure Claude Code to use local HTTP MCP; confirm the same discovery, model-listing, and conversation checks.
+- [x] **SB-053** Configure Claude Code to use local HTTP MCP; confirm the same discovery, model-listing, and conversation checks.
   - Evidence: recorded live Claude Code run listed profiles and made two `ask_second_brain` calls; the follow-up used the returned ID.
   - Note: unchecked for the same reasons as SB-052. The running local server predates the round-1 fixes (its published `mode` schema has no `enum`), so a Claude Code re-run needs the server restarted on current code.
+  - Evidence (2026-10-26, with owner permission to restart the server): the workstation server was restarted on current code (`8199b98`). Through this Claude Code session's `second-brain` MCP connection: both tools discovered; `list_models` returned the four profile tags plus two unselectable models and `truncated: false`; a first `32k` question stored code word `HARBOR-7712` (conversation `hLyAKueX…`, principal `claude-code`); a follow-up on the returned ID answered `HARBOR-7712`. The server was then stopped and started again, and a follow-up on the same ID answered `HARBOR-7712` (`prompt_tokens` 285, `history_trimmed: false`); `conversations show` listed every turn under `claude-code`.
+  - Note: one post-restart question that mentioned "a server restart" got the model to claim it had no history, although the prompt included it (`prompt_tokens` rose from 181 to 226). That is model behavior, not a persistence failure; the neutral re-ask above recalled the code word. This session's displayed tool schema was cached at session start, so the `mode` enum was confirmed separately by the RM2-040 Inspector check.
 - [ ] **SB-054** Register/connect the authorized remote endpoint in the owner's actual ChatGPT environment and verify live `list_models` and `ask_second_brain` calls, then a conversation continuation. **[EXTERNAL ACCESS MAY BLOCK]**
   - Note: Blocked — no remote endpoint or ChatGPT workspace access.
 - [x] **SB-055** If ChatGPT cannot connect because of account/workspace permission, connector transport, or auth policy, document the exact issue and evidence; do not mark ChatGPT validated or invent a workaround.

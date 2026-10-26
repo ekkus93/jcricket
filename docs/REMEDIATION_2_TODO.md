@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation Round 2 TODO
 
-**Status:** All RM2 tasks checked with evidence (2026-10-26). Remaining exceptions outside this file: SB-052 and SB-053 need live Codex and Claude Code re-runs on current code including a restart of the workstation server; Gate R1 fail-first evidence covers 3 of 12 round-1 bugs; the R-35 owner-decision note (RM2-031) awaits owner confirmation; SB-062 and the ChatGPT items stay blocked.  
+**Status:** All RM2 tasks checked with evidence (2026-10-26). Remaining exceptions outside this file: SB-052 needs a live Codex re-run on current code including a restart (SB-053 passed on 2026-10-26); Gate R1 fail-first evidence covers 3 of 12 round-1 bugs; the R-35 owner-decision note (RM2-031) awaits owner confirmation; SB-062 and the ChatGPT items stay blocked.  
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_2_SPEC.md](REMEDIATION_2_SPEC.md) (requirements `R2-xx`)  
 **Related:** [TODO.md](TODO.md) (`SB-xxx`), [REMEDIATION_TODO.md](REMEDIATION_TODO.md) (`RM-xxx`)

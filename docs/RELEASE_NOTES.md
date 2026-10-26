@@ -18,7 +18,7 @@
 - No shared memory exists between principals. Model quality, tokenization, and actual throughput depend on the installed Ollama models and hardware.
 - The reverse-proxy example is explicitly non-functional until a remote authentication design is approved and implemented; it clears client `Authorization` headers.
 - uvicorn's access log records request paths including query strings. The server never reads prompts or credentials from the query string.
-- Live Codex and Claude Code client checks (SB-052, SB-053) were recorded against earlier code and still need a re-run on the current code, including a server restart.
+- The live Codex client check (SB-052) was recorded against earlier code and still needs a re-run on current code, including a server restart. The Claude Code check (SB-053) passed on current code on 2026-10-26, including persistence across a restart.
 - Gate R1's "regression tests failed before the fix" evidence covers 3 of the 12 round-1 bugs; the other 9 tests could not run against the pre-fix code (see `docs/REMEDIATION_TODO.md`). Every round-2 fix has recorded fail-first evidence.
 
 ## External blockers
