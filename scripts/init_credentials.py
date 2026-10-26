@@ -39,7 +39,15 @@ def main() -> int:
     else:
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         path.parent.chmod(0o700)
-        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        try:
+            descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            print(
+                f"credentials file already exists: {path}; "
+                "use --rotate to replace its tokens",
+                file=sys.stderr,
+            )
+            return 1
         with os.fdopen(descriptor, "w", encoding="utf-8") as credentials_file:
             credentials_file.write(
                 "".join(f"{name}={token}\n" for name, token in tokens.items())

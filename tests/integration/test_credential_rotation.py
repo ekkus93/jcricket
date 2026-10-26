@@ -130,3 +130,37 @@ def test_failed_replacement_restores_already_rotated_files(
         "credentials.env",
         "credentials.env.bak",
     ]
+
+
+def _init(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        capture_output=True,
+        text=True,
+        env=os.environ | {"HOME": str(home)},
+    )
+
+
+def test_rotate_without_existing_file_fails_cleanly(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    result = _init(home, "--rotate")
+    path = home / ".config/second-brain/credentials.env"
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert result.stderr.strip() == (
+        f"cannot rotate credentials: credentials file does not exist: {path}"
+    )
+
+
+def test_create_refuses_existing_file_without_traceback(tmp_path: Path) -> None:
+    home, user_file, _service_file = _setup(tmp_path)
+    original = user_file.read_text(encoding="utf-8")
+    result = _init(home)
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert result.stderr.strip() == (
+        f"credentials file already exists: {user_file}; "
+        "use --rotate to replace its tokens"
+    )
+    assert user_file.read_text(encoding="utf-8") == original

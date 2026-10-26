@@ -102,10 +102,12 @@
 - [x] **TCT-062** `scripts/check_todo_integrity.py` failure cases (TC-62).
   - Test: unknown baseline commit and missing TODO file each exit 1 with the TC-62 message; `--baseline TODO.md` exits 2 with `--baseline must use PATH@COMMIT`.
   - Evidence: `tests/unit/test_todo_integrity.py` — `test_unknown_baseline_commit_is_reported`, `test_missing_todo_file_is_reported`, `test_baseline_without_commit_is_a_usage_error`. No defect found.
-- [ ] **TCT-063** `scripts/init_credentials.py` failure cases, fixing the create-over-existing-file crash (TC-63, TC-81).
+- [x] **TCT-063** `scripts/init_credentials.py` failure cases, fixing the create-over-existing-file crash (TC-63, TC-81).
   - Test: `--rotate` with no user file exits 1 with `cannot rotate credentials: credentials file does not exist: <path>` and no traceback.
   - Test: creating when the file exists exits 1 with `credentials file already exists: <path>; use --rotate to replace its tokens`, no traceback, and the file unchanged.
   - Evidence required: the create-over-existing test fails before the fix (currently a `FileExistsError` traceback, reproduced 2026-10-26).
+  - Evidence (fail first): `test_create_refuses_existing_file_without_traceback` failed on the unfixed script with `Traceback … FileExistsError` in stderr.
+  - Evidence (after fix): the create path catches `FileExistsError`, prints `credentials file already exists: <path>; use --rotate to replace its tokens`, and exits 1; the file is unchanged. `test_rotate_without_existing_file_fails_cleanly` passed without a fix. Full suite 276 passed, 1 skipped (plain run 7.2 s).
 - [ ] **TCT-064** Re-run coverage after TCT-063 and add tests for any `scripts/init_credentials.py` staging or restore lines still uncovered (`:106`, `:113-116`, `:128` at `588dbfb`), or record a `Note:` explaining why a line cannot be reached (TC-01, §10).
 
 ## Phase F — Gate and final verification (P0)
@@ -136,6 +138,6 @@ Populate as work proceeds. Do **not** predeclare success.
 |---|---|---|
 | Baseline with subprocess coverage (TCT-001) | Recorded | 2026-10-26, on `c4eb4f1` + TCT-001 config: auth.py 96%, budget 100%, cli 81%, config 90%, errors 100%, ollama 90%, prompts 75%, schemas 100%, server 97%, service 95%, store 96%, `deploy/auth_headers.py` 85%, `scripts/check_todo_integrity.py` 92%, `scripts/init_credentials.py` 84%; total 91% (1300 statements, 88 missed, 388 branches, 56 partial). 202 passed, 1 skipped. |
 | Phase checks (sync, Ruff, pytest, coverage) | Not run | — |
-| Fail-first evidence for exposed defects (TC-03, TCT-063) | In progress | TCT-032: `load_config` list-root message lacked the file path; test failed first, then fixed. |
+| Fail-first evidence for exposed defects (TC-03, TCT-063) | Recorded | TCT-032: `load_config` list-root message lacked the file path (test failed first, then fixed, `a0ae4d8`). TCT-063: create over an existing credentials file crashed with a `FileExistsError` traceback (test failed first, then fixed). |
 | Final coverage table and `fail_under` (TCT-070) | Not run | — |
 | Final verification (TCT-071) | Not run | — |
