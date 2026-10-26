@@ -13,12 +13,16 @@
 - Use `uv`, Python, the existing Ollama installation, and direct Ubuntu deployment; no Docker or Podman.
 - Discover installed model names using Ollama `/api/tags` and loaded status using `/api/ps`; never invent tags or allow arbitrary model execution.
 - Mark an item complete only after implementation **and** verification. Keep external/manual blockers visible instead of silently treating them as done.
+- TODO entries state requirements, not outcomes. Never reword requirement text when updating a checkbox; put evidence and caveats in notes or the verification record.
+- Narrowing or dropping a requirement requires an explicit owner decision recorded here with a date and, when it changes `SPEC.md`, a corresponding specification update.
+- Check an item only when every clause of its original requirement is implemented and verified; partial completion stays unchecked.
 - Stop the first release at an independently useful, secure tool-free chatbot; memory sharing and advanced agent features remain deferred.
 
 ## Phase 0 — Repository and baseline (P0)
 
 - [x] **SB-001** Repository exists at the remote supplied by the owner.
-- [x] **SB-002** `docs/SPEC.md` and `docs/TODO.md` are committed; package metadata is established.
+- [ ] **SB-002** Commit `SPEC.md` and `TODO.md` at repository root and establish project naming/package metadata.
+  - The specs and package metadata are committed, but the specification files remain under `docs/`; leaving this requirement unchecked avoids claiming the root-path clause is complete.
 - [x] **SB-003** Create `pyproject.toml`, Python >=3.12 environment, `uv.lock`, runnable module/CLI entry points, `ruff`, `pytest`, and `pytest-asyncio`.
 - [x] **SB-004** Add `.gitignore` for local SQLite databases, secrets, `.env`, virtual environments, logs, and generated files.
 - [x] **SB-005** Create `README.md` with project summary, architecture, prerequisite installation, and example of intended chat flow.
@@ -37,8 +41,10 @@
 - [x] **SB-015** Implement `ask_second_brain` validation (including optional approved `model` versus `model_profile` conflict rejection) and normalized response (`answer`, `conversation_id`, `mode`, `model_profile`, `model`, `context_limit_tokens`, `history_trimmed`, `usage`).
 - [x] **SB-016** Implement MCP server on Streamable HTTP `/mcp` using a maintained Python SDK; publish exactly `ask_second_brain` and `list_models`, with truthful stateful/read-only metadata respectively.
 - [x] **SB-017** Add consistent error classification, bounded tool responses, configurable completion-token reserve, max request bytes, and concurrency limit (initially one Ollama generation).
-- [x] **SB-018** Test the implemented modes, profiles, direct model selection, validation, malformed Ollama output, and timeouts via mocks.
-- [x] **SB-019** Run MCP Inspector against loopback server and confirm exactly two discoverable tools with usable schemas and read-only model inventory.
+- [ ] **SB-018** Test all five modes, every profile mapping, approved direct model selection, disallowed/missing names, both selectors supplied, input validation, malformed Ollama output, and timeouts via mocks.
+  - Existing tests cover common profile, selector, mode, malformed-response, and timeout cases. Full R-51 coverage is tracked under RM-051.
+- [ ] **SB-019** Run MCP Inspector against loopback server and confirm exactly two discoverable tools with usable schemas, valid responses, read-only model inventory, and safe errors.
+  - Tool discovery and valid responses were verified; standardized safe error responses remain pending RM-053.
 
 **Gate P1:** An MCP client can list installed/loaded Ollama models and ask one question, while Ollama remains tool-free.
 
@@ -59,9 +65,10 @@
 ## Phase 3 — Local access and auth boundary (P0)
 
 - [x] **SB-030** Bind the application to `127.0.0.1` by default; ensure Ollama also stays on a trusted local/private listener.
-- [x] **SB-031** Implement verified local principals using separately provisioned `codex` and `claude-code` credentials before any conversation access.
+- [x] **SB-031** Implement verified local principals using separately provisioned `codex` and `claude-code` credentials (or equivalent secure local mechanism) before any conversation access.
 - [x] **SB-032** Apply request size, queue length, rate and concurrency limits; validate Host and Origin policy using SDK/proxy-safe settings.
-- [x] **SB-033** Provide credentials provisioning instructions and helper; local distinct tokens are mode `0600` and untracked.
+- [ ] **SB-033** Provide `.env`/secret provisioning instructions and test token rotation without committing real credentials.
+  - Provisioning instructions and private credentials exist; rotation testing remains under RM-047.
 - [x] **SB-034** Implement sanitized logs, request IDs, model/profile/time/usage metrics, and basic `/healthz` without secret/prompt disclosure.
 - [ ] **SB-035** Add the full security regression matrix; authentication, principal mapping, Host/Origin, rate limit, and model validation are tested, but every listed adversarial case is not yet covered.
 
@@ -70,7 +77,7 @@
 ## Phase 4 — Remote ChatGPT transport (P0 integration path)
 
 - [ ] **SB-040** Inspect the owner's working Ralph Bridge connectivity/auth deployment **as a design reference** (without copying credentials); verify current ChatGPT workspace/account feature support.
-  - Owner decision (2026-10-26): Drop this optional Ralph Bridge reference requirement; it is not a dependency of the Ollama MCP server. Updated `docs/SPEC.md` §§2.1.10 and 7.2 to remove the references. ChatGPT workspace access remains tracked in SB-054.
+  - Owner decision (2026-10-26): Drop the Ralph Bridge design-reference requirement; it is not a dependency of the Ollama MCP server. Removed the references from `docs/SPEC.md` §§2.1.10 and 7.2. This task remains unchecked as dropped scope; ChatGPT workspace access remains tracked in SB-054.
 - [ ] **SB-041** Choose secure remote ingress: TLS reverse proxy or supported private MCP tunnel. Keep MCP/Ollama/SQLite internal and enforce a strict trusted-host configuration.
 - [ ] **SB-042** Determine actual ChatGPT authentication requirements. Where applicable use conformant OAuth 2.1, protected-resource metadata, PKCE, secure authorization-server integration, and issuer/audience/scope verification; avoid writing a custom provider when one already exists.
 - [ ] **SB-043** Allocate a distinct authenticated `chatgpt` principal so its conversations are isolated from Codex and Claude Code.
@@ -99,10 +106,13 @@
 - [ ] **SB-060** Finish regression suite: restarts, timeouts, cancellations, SQLite contention, malformed requests, oversized questions, long histories, and model outages.
 - [x] **SB-061** Documented private persistent data, file permissions, backup/restore, logging, and deletion behavior in `docs/operations.md`.
 - [ ] **SB-062** Provide systemd unit and Ubuntu setup; an example and setup instructions exist, but startup/restart/shutdown cannot be demonstrated because this environment is not booted with systemd.
-- [ ] **SB-063** Local Codex and Claude setup guides are present; ChatGPT guide and live checks remain blocked on remote authentication and workspace access.
-- [x] **SB-064** Document runtime configuration, admin CLI, profile selection, usage reporting, backup, migration, troubleshooting, and removal in `docs/operations.md`.
-- [x] **SB-065** Run `uv sync --locked`, Ruff lint/format checks, the mocked pytest suite, and local live MCP/Ollama/client checks. Remote checks remain blocked.
-- [x] **SB-066** Reconcile checkboxes against current evidence and document outstanding blockers/deferred work. Release notes remain pending final release.
+- [ ] **SB-063** Provide separate Codex, Claude Code, and ChatGPT connection guides, `list_models` examples, sample prompts, profile/direct-model selection, troubleshooting, and secure token instructions.
+  - Local client guidance exists. ChatGPT remote setup remains blocked by missing ingress and workspace access.
+- [x] **SB-064** Document runtime configuration, admin CLI, profile switching, usage reporting, backup, migration, and removal.
+- [ ] **SB-065** Run `uv sync --locked`, `ruff check`, formatting checks, full mocked pytest suite, and explicit opt-in live integration tests; fix all actionable failures.
+  - Mocked checks passed at baseline; repeatable opt-in live tests remain under RM-052.
+- [ ] **SB-066** Reconcile TODO checkboxes against code and verified evidence. Document deferred items and exact blockers. Produce v0.1 release notes.
+  - Release notes and final evidence reconciliation remain pending RM-061–RM-064.
 
 **Gate P6:** Secure, reproducible MVP ready for regular use.
 

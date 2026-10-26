@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation TODO
 
-**Status:** Not started  
+**Status:** In progress — Phase R0 baseline and TODO integrity work complete; remediation phases remain
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_SPEC.md](REMEDIATION_SPEC.md) (requirements `R-xx`), [SPEC.md](SPEC.md)  
 **Related:** [TODO.md](TODO.md) (original v0.1 items `SB-xxx`)
@@ -17,19 +17,23 @@
 
 ## Phase R0 — Repository and TODO hygiene (P0, do first)
 
-- [ ] **RM-001** Commit the current implementation as-is, before any remediation, so later diffs are reviewable (R-01). Include `pyproject.toml`, `uv.lock`, `src/`, `tests/`, `deploy/`, `scripts/`, `config.example.yaml`, `docs/operations.md`, `docs/integrations/`, `AGENTS.md`, and the modified `.gitignore`, `README.md`, `docs/TODO.md`.
+- [x] **RM-001** Commit the current implementation as-is, before any remediation, so later diffs are reviewable (R-01). Include `pyproject.toml`, `uv.lock`, `src/`, `tests/`, `deploy/`, `scripts/`, `config.example.yaml`, `docs/operations.md`, `docs/integrations/`, `AGENTS.md`, and the modified `.gitignore`, `README.md`, `docs/TODO.md`.
   - Acceptance: `git status` is clean apart from ignored files; no `config.yaml`, database, credentials, `.venv`, or `__pycache__` is tracked.
+  - Baseline commit: `ca3a444` (`Commit initial Second Brain MCP implementation`). RM-002 then made `.serena/` ignored; the worktree was clean apart from ignored local state and private runtime files were not tracked.
 - [x] **RM-002** Fix `.gitignore` gaps: `.serena/`, `*.db`, `*.sqlite`, `*.sqlite-wal`, `*.sqlite-shm`, `credentials.env` (keep `*.env.example` allowed) (R-06).
   - Acceptance: `git check-ignore` confirms each pattern; `deploy/credentials.env.example` is still tracked.
   - Verified with `git check-ignore -v --no-index`; the example credentials file remains tracked and unignored.
-- [ ] **RM-003** Verify Gate P0 from a fresh clone (R-01). Depends on RM-001 and RM-002.
+- [x] **RM-003** Verify Gate P0 from a fresh clone (R-01). Depends on RM-001 and RM-002.
   - Acceptance: in an empty temporary directory, `git clone`, `uv sync --locked`, Ruff check, Ruff format check, and `uv run pytest` all pass. Record the commit hash and results in the verification record.
-- [ ] **RM-004** Add the TODO integrity rules from R-02 to the "Working rules" section of `docs/TODO.md`.
-- [ ] **RM-005** Restore the original `HEAD` wording of SB-018, SB-019, SB-031, SB-033, SB-063, SB-064, SB-065, and SB-066 in `docs/TODO.md`, and re-evaluate each checkbox against the restored text as R-03's table specifies (R-03).
+- [x] **RM-004** Add the TODO integrity rules from R-02 to the "Working rules" section of `docs/TODO.md`.
+  - Added requirements-vs-outcomes, scope-change, and full-evidence rules.
+- [x] **RM-005** Restore the original `HEAD` wording of SB-018, SB-019, SB-031, SB-033, SB-063, SB-064, SB-065, and SB-066 in `docs/TODO.md`, and re-evaluate each checkbox against the restored text as R-03's table specifies (R-03).
   - Acceptance: `git diff 5f245be -- docs/TODO.md` shows no changed requirement text for these items apart from added indented notes; SB-018, SB-019, SB-033, SB-065, and SB-066 are unchecked.
+  - Compared all nine affected requirement strings, including SB-040, against `5f245be:docs/TODO.md`; all match. Re-evaluated checkboxes and added notes for partial work and owner-dropped scope.
 - [x] **RM-006** **[OWNER DECISION]** Decide SB-040: (a) restore the original Ralph Bridge design-reference requirement, unchecked, or (b) drop it, recording the owner's decision and date in `TODO.md` and amending `SPEC.md` §2.1.10 and §7.2 (R-04). The implementer must not decide.
   - Owner chose option (b) on 2026-10-26. The decision is noted under SB-040 in `docs/TODO.md`; Ralph Bridge references were removed from `docs/SPEC.md` §§2.1.10 and 7.2. The task is complete; the now-dropped SB-040 implementation requirement remains unchecked for traceability.
-- [ ] **RM-007** Fix SB-002's state. Leave it checked only once RM-001 is committed and RM-003 has passed.
+- [x] **RM-007** Fix SB-002's state. Leave it checked only once RM-001 is committed and RM-003 has passed.
+  - Corrected SB-002 to unchecked after restoring its original wording: the spec/TODO and project metadata are committed and Gate P0 passes, but the original “at repository root” clause is not met because the files remain under `docs/`.
 
 **Gate R0:** The repository, not just the working tree, contains the implementation; a fresh clone passes all checks; `TODO.md` states requirements truthfully.
 
@@ -192,7 +196,8 @@ Populate as work proceeds. Do **not** predeclare success.
 
 | Verification | Result | Evidence (commit/test/log) |
 |---|---|---|
-| Fresh-clone install, lint, and tests (RM-003) | Not run | — |
+| Fresh-clone install, lint, and tests (RM-003) | Passed | Local fresh clone at baseline commit `80ac1102b25128905731505ce167f96050b8b524`; `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 35 passed, one Starlette/httpx deprecation warning. No Ollama/network service was needed. |
+| Phase R0 checks | Passed | After TODO integrity edits: `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest`: 35 passed, one Starlette/httpx deprecation warning. |
 | Bug regression tests, all twelve (Gate R1) | Not run | — |
 | Log leakage test (RM-036) | Not run | — |
 | Full R-51 mocked coverage (RM-051) | Not run | — |
