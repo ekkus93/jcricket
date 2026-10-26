@@ -91,11 +91,13 @@
 
 ### Credentials and deployment
 
-- [ ] **RM2-016** Rewrite `--rotate`: atomic `.bak` replacement, other lines preserved, all targets staged before any replacement, rollback on partial failure, and clean exit-1 errors (R2-18).
+- [x] **RM2-016** Rewrite `--rotate`: atomic `.bak` replacement, other lines preserved, all targets staged before any replacement, rollback on partial failure, and clean exit-1 errors (R2-18).
   - Test: three consecutive rotations succeed, each `.bak` holds the previous tokens, and modes are preserved (`0600`, `0640`, `0600` backups).
   - Test: an extra `CHATGPT_MCP_TOKEN=…` line and a comment survive unchanged.
   - Test: an unwritable service-file directory leaves the user file unchanged, exit status 1, no traceback.
   - Evidence required: the three-rotations test fails on `ad85cdb` (`FileExistsError`).
+  - Evidence (fail first): `tests/integration/test_credential_rotation.py` on the unfixed script: `test_three_consecutive_rotations_keep_previous_tokens_in_backup` failed with `FileExistsError` on the second rotation; the other three also failed.
+  - Evidence (after fix): `scripts/init_credentials.py` stages every new file and backup before replacing anything, replaces `.bak` atomically, rewrites only the two token lines, restores earlier targets if a later replacement fails, and exits 1 with a one-line message. All 4 rotation tests pass (including `test_failed_replacement_restores_already_rotated_files`, which injects a replace failure), plus the existing rotation/old-token test; full suite 181 passed, 1 skipped. A manual smoke run showed a clean exit 1 for a missing file and two consecutive successful rotations.
 - [ ] **RM2-017** Let `auth_headers.py` accept any valid principal name, requiring `--env-var` for names other than `codex` and `claude-code` (R2-19).
   - Test: `chatgpt --env-var CHATGPT_MCP_TOKEN` prints the header; `chatgpt` alone exits 2 with the required message; an invalid name exits 2.
   - Evidence required: the `chatgpt --env-var` test fails on `ad85cdb` (invalid choice).
