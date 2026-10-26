@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation Round 2 TODO
 
-**Status:** All RM2 tasks checked with evidence (2026-10-26). Remaining exceptions outside this file: SB-052 needs a live Codex re-run on current code including a restart (SB-053 passed on 2026-10-26); Gate R1 fail-first evidence covers 3 of 12 round-1 bugs; the R-35 owner-decision note (RM2-031) awaits owner confirmation; SB-062 and the ChatGPT items stay blocked.  
+**Status:** All RM2 tasks checked with evidence, including the Phase F owner follow-up (2026-10-26). Remaining exceptions outside this file: SB-052 needs a live Codex re-run on current code including a restart (SB-053 passed on 2026-10-26); Gate R1 fail-first evidence covers 3 of 12 round-1 bugs; SB-062 and the ChatGPT items stay blocked.  
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_2_SPEC.md](REMEDIATION_2_SPEC.md) (requirements `R2-xx`)  
 **Related:** [TODO.md](TODO.md) (`SB-xxx`), [REMEDIATION_TODO.md](REMEDIATION_TODO.md) (`RM-xxx`)
@@ -167,8 +167,10 @@
 - [x] **RM2-050** Restore the one-tag-one-budget rule, keeping placeholder detection first (R2-60).
   - Test: one tag shared by all four profiles fails with the new message; four distinct tags load; an allowed model sharing a profile tag loads with that profile's budget and fails otherwise; `config.example.yaml` fails with exactly the placeholder message.
   - Evidence: `config.py` rejects any tag mapped by more than one profile (message names the tag and profiles and explains that some models ignore the request's `num_ctx`); allowed models sharing a profile tag must use that profile's budget; placeholder detection still runs first. `test_rejects_one_tag_shared_by_profiles` failed before the change and passes after; `test_example_config_with_distinct_tags_loads`, `test_allowed_model_sharing_profile_tag_must_use_profile_budget`, and `test_example_config_fails_only_on_placeholders` pass. Full suite 193 passed, 1 skipped.
-- [ ] **RM2-051** Update `SPEC.md` §5, `docs/operations.md`, `docs/RELEASE_NOTES.md`, `README.md`, `config.example.yaml`, and the R-35 owner-decision note in `REMEDIATION_SPEC.md` for the context-window requirement (R2-61).
+- [x] **RM2-051** Update `SPEC.md` §5, `docs/operations.md`, `docs/RELEASE_NOTES.md`, `README.md`, `config.example.yaml`, and the R-35 owner-decision note in `REMEDIATION_SPEC.md` for the context-window requirement (R2-61).
   - Acceptance: no document says profiles may share a tag; each named document states that a profile's budget must not exceed its variant's real window and that some models ignore request `num_ctx`.
+  - Evidence: `SPEC.md` §5 gains a "Context-window check" paragraph; `docs/operations.md` gains "Model variants and context windows"; `README.md`, `docs/RELEASE_NOTES.md` (feature, limitation, verification), and a `config.example.yaml` comment state the variant requirement; the R-35 owner-decision note in `docs/REMEDIATION_SPEC.md` now records the one-tag-per-profile decision. A grep for tag-sharing claims finds none outside the round-2 spec/TODO history; full suite 202 passed, 1 skipped.
+  - Note: `REMEDIATION_2_SPEC.md` R2-15 and `REMEDIATION_2_TODO.md` RM2-014 keep their original wording (requirement history), each with an owner-decision note pointing to R2-60 / RM2-050.
 - [x] **RM2-052** Add the `/api/show` context-window check to `check-config` and `serve` with the R2-62 rules, messages, and exit behavior; list `/api/show` in `SPEC.md` §3.1, §4.2, and §5 (R2-62).
   - Test: every R2-62 mocked acceptance case.
   - Acceptance: a live `check-config` against the workstation's Ollama passes with a warning only for the unpinned `4k` tag.

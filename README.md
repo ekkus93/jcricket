@@ -16,7 +16,7 @@ cp config.example.yaml config.yaml
 ollama list
 ```
 
-Edit `config.yaml` with exact installed model tags and set credential values through the environment variables named in `token_env`. Keep local secrets and runtime data out of version control. Run lint, formatting, and unit tests with:
+Edit `config.yaml` with exact installed model tags. Each profile needs its own model tag whose real context window is at least the profile's budget. Some models, including Qwen3.5, ignore the request's `num_ctx`, so build one variant per context size (for example, a Modelfile with `PARAMETER num_ctx 32768`) and map each profile to its own variant. `uv run second-brain --config config.yaml check-config` checks each budget against the model's real window. Set credential values through the environment variables named in `token_env`. Keep local secrets and runtime data out of version control. Run lint, formatting, and unit tests with:
 
 ```sh
 uv run ruff check .

@@ -256,8 +256,8 @@ Keep the current policy (newest complete pairs that fit; `history_trimmed` true 
 - `log_level` not in `DEBUG | INFO | WARNING | ERROR | CRITICAL` (case-insensitive; normalize to upper case).
 - Any profile or allowed model whose `context_tokens - effective_completion_tokens` is less than `estimate(system prompt for the longest mode) + MIN_INPUT_TOKENS` (constant `256`).
 - `completion_tokens` greater than or equal to the selection's `context_tokens`.
-- A tag listed in `allowed_models` whose budget does not equal **any** of the budgets of the profiles that map the same tag. The message tells the administrator to select that tag through a profile instead. Several profiles may map the same tag; each request sends its own `num_ctx`.
-  - Owner decision (2026-10-26): amended by `REMEDIATION_2_SPEC.md` R2-15. Originally this rule compared against a single profile budget, and the implementation also rejected one tag shared by two profiles, which broke `config.example.yaml`. The owner commissioned REMEDIATION_2 (including R2-15) and directed its implementation; this note records that basis.
+- A tag listed in `allowed_models` that is also mapped by a profile with a **different** budget. The message tells the administrator to select that tag through the profile instead, so one tag never has two conflicting budgets. No tag may be mapped by two profiles.
+  - Owner decision (2026-10-26): keep one tag per profile and one budget per tag, because some models (including the owner's Qwen3.5 9B) ignore the request's `num_ctx` and only honor the window pinned in the model variant. This reverses the tag-sharing part of `REMEDIATION_2_SPEC.md` R2-15 (see R2-60); placeholder detection from R2-15 stays.
 - `token_env` principal names that are not lowercase `[a-z][a-z0-9-]{0,31}` or env var names that are not `[A-Z_][A-Z0-9_]*`.
 - `limits.inventory_cache_seconds` outside `0–300`.
 
