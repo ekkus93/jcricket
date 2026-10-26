@@ -114,8 +114,10 @@
 
 ## Phase F — Gate and final verification (P0)
 
-- [ ] **TCT-070** Meet the TC-70 targets and set `fail_under` (TC-70).
+- [x] **TCT-070** Meet the TC-70 targets and set `fail_under` (TC-70).
   - Acceptance: `src/second_brain_mcp` ≥ 97% and `scripts/` + `deploy/` ≥ 90% combined line+branch coverage; every §10 location covered or marked removed; `fail_under` set to the achieved total rounded down; no new `# pragma: no cover`.
+  - Evidence: `src/second_brain_mcp` 99.93% (1052 statements, 0 missed, 296 branches, 1 partial); `scripts/` + `deploy/` 97.67% (253 statements, 2 missed); total 99.47%. Every §10 location is covered, except `service.py:175`, which was removed (TCT-023). `fail_under = 99` is in `[tool.coverage.report]`; the full report passes, and `--fail-under=99.9` exits 2, so the gate works. `grep -rn "pragma: no cover"` over `src`, `scripts`, `deploy`, `tests` finds nothing.
+  - Note: the remaining partial branches are `cli.py:117->exit` (unreachable `action`, see TCT-060) and `init_credentials.py:122->124` (see TCT-064). The uncovered script lines (`auth_headers.py:55`, `63->exit`; `check_todo_integrity.py:58`, `122->127`, `137->exit`) are outside §10 and above the 90% target.
 - [ ] **TCT-071** Final verification on the last commit (TC-71).
   - Acceptance: every TC-71 command passes and is recorded with the commit hash; `uv run pytest -q` stays under 15 seconds; the final per-module coverage table is in the verification record.
 
