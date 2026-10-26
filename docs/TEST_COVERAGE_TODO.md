@@ -96,10 +96,12 @@
   - Test: `system_prompt("nope")` raises `ValueError("unsupported mode: nope")`.
   - Evidence: `tests/integration/test_cli_admin.py` (10 tests): `get-any` found and unknown; `export` to stdout for all conversations and for `--principal codex` (turn contents checked); `export missing --output FILE` exits `conversation not found` with no file; `purge` with no age or retention exits with the exact message and deletes nothing; TTY + `y` deletes only the target; `main()` dispatches `check-config` (`Configuration is valid.`), `conversations list`, and `serve` (patched `server.run` gets the loaded config); `system_prompt("nope")`. No defect found. `cli.py` 99% (0 missed lines), `prompts.py` 100%.
   - Note: the one remaining partial branch, `cli.py:117->exit`, is an `action` outside the `elif` chain; argparse's subcommands make it unreachable. It is left as is rather than tested as a silent no-op or rewritten (a behavior change outside this TODO).
-- [ ] **TCT-061** `deploy/auth_headers.py` failure cases (TC-61).
+- [x] **TCT-061** `deploy/auth_headers.py` failure cases (TC-61).
   - Test: invalid `--env-var` exits 2; malformed line, short token, and missing file exit 1 with the exact TC-61 messages; a quoted value is printed unquoted; failures print nothing to stdout and never echo the token.
-- [ ] **TCT-062** `scripts/check_todo_integrity.py` failure cases (TC-62).
+  - Evidence: `tests/security/test_auth_headers.py` — `test_auth_header_helper_rejects_invalid_env_var_name`, `test_auth_header_helper_rejects_bad_credential_files` (malformed line, 20-char token; exact stderr, empty stdout, token absent from stderr), `test_auth_header_helper_reports_missing_file`, `test_auth_header_helper_strips_quotes`. No defect found.
+- [x] **TCT-062** `scripts/check_todo_integrity.py` failure cases (TC-62).
   - Test: unknown baseline commit and missing TODO file each exit 1 with the TC-62 message; `--baseline TODO.md` exits 2 with `--baseline must use PATH@COMMIT`.
+  - Evidence: `tests/unit/test_todo_integrity.py` — `test_unknown_baseline_commit_is_reported`, `test_missing_todo_file_is_reported`, `test_baseline_without_commit_is_a_usage_error`. No defect found.
 - [ ] **TCT-063** `scripts/init_credentials.py` failure cases, fixing the create-over-existing-file crash (TC-63, TC-81).
   - Test: `--rotate` with no user file exits 1 with `cannot rotate credentials: credentials file does not exist: <path>` and no traceback.
   - Test: creating when the file exists exits 1 with `credentials file already exists: <path>; use --rotate to replace its tokens`, no traceback, and the file unchanged.

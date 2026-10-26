@@ -107,3 +107,30 @@ def test_undated_owner_decision_does_not_allow_change(repo: Path) -> None:
     result = _run(repo, todo)
     assert result.returncode == 1
     assert "T-002: requirement text changed" in result.stdout
+
+
+def _check(repo: Path, *baselines: str) -> subprocess.CompletedProcess[str]:
+    arguments = [sys.executable, str(SCRIPT), "--repo", str(repo)]
+    for baseline in baselines:
+        arguments += ["--baseline", baseline]
+    return subprocess.run(arguments, capture_output=True, text=True)
+
+
+def test_unknown_baseline_commit_is_reported(repo: Path) -> None:
+    result = _check(repo, "TODO.md@deadbeef")
+    assert result.returncode == 1
+    assert "TODO.md: baseline deadbeef could not be read" in result.stdout
+
+
+def test_missing_todo_file_is_reported(repo: Path) -> None:
+    commit = _git(repo, "rev-list", "--max-parents=0", "HEAD")
+    (repo / "TODO.md").unlink()
+    result = _check(repo, f"TODO.md@{commit}")
+    assert result.returncode == 1
+    assert "TODO.md: file could not be read" in result.stdout
+
+
+def test_baseline_without_commit_is_a_usage_error(repo: Path) -> None:
+    result = _check(repo, "TODO.md")
+    assert result.returncode == 2
+    assert "--baseline must use PATH@COMMIT" in result.stderr
