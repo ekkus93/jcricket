@@ -1,0 +1,41 @@
+[project]
+name = "second-brain-mcp"
+version = "0.1.0"
+description = "A private, tool-free Ollama second brain exposed over MCP"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "httpx>=0.28,<1",
+  "mcp[cli]>=1.12,<2",
+  "pydantic>=2.11,<3",
+  "pyyaml>=6,<7",
+]
+
+[project.scripts]
+second-brain = "second_brain_mcp.cli:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4,<9",
+  "pytest-asyncio>=1.1,<2",
+  "ruff>=0.12,<1",
+]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/second_brain_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

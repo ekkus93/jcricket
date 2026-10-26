@@ -33,7 +33,7 @@ The first release optimizes for simplicity, private operation, predictable tool 
 7. Persist per-conversation messages in **SQLite** so calls can continue after an MCP restart.
 8. The primary assistant decides when to consult the second brain. No autonomous AI-to-AI exchanges, polling, recursive consultations, or tools that call back into the primary assistant.
 9. The project is **local-first**, uses open-source packages, and must run directly on Ubuntu without Docker or Podman.
-10. Follow the successful deployment/integration pattern of the existing Ralph Bridge **where compatible**, but verify current ChatGPT connector requirements rather than assume identical authorization or plan support.
+10. Verify current ChatGPT connector requirements rather than assume a particular authorization flow or plan support.
 
 ### 2.2 In scope for v0.1
 
@@ -283,7 +283,7 @@ A local `stdio` adapter may be added only if actual client compatibility require
 
 Expose a stable MCP endpoint (typically `https://<private-host>/mcp`) through a trusted HTTPS reverse proxy or supported private MCP tunnel. Ollama and SQLite stay on the trusted host. The proxy must enforce appropriate Host/Origin policy, TLS, request size limits, and safe forwarded headers.
 
-**Do not assume that a static shared bearer token is sufficient for ChatGPT.** Evaluate the *actual* available connection flow and, where applicable, implement OAuth 2.1-compatible MCP protected-resource metadata, authorization-server integration, PKCE, correctly scoped/audience-bound tokens, and token verification. Reuse an existing trustworthy identity provider or the already established Ralph Bridge connection approach if it conforms to the current requirements. Do not write a custom OAuth provider solely to meet the MVP if an existing supported solution is available.
+**Do not assume that a static shared bearer token is sufficient for ChatGPT.** Evaluate the *actual* available connection flow and, where applicable, implement OAuth 2.1-compatible MCP protected-resource metadata, authorization-server integration, PKCE, correctly scoped/audience-bound tokens, and token verification. Reuse an existing trustworthy identity provider if it conforms to the current requirements. Do not write a custom OAuth provider solely to meet the MVP if an existing supported solution is available.
 
 ChatGPT custom MCP connectivity is a **product/workspace capability**, separate from server correctness. Verify the account/workspace can register this connection; a secure, working HTTP server alone cannot confer ChatGPT access. ChatGPT end-to-end verification is an acceptance gate and may be a documented external blocker, while local MVP development proceeds.
 

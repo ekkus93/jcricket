@@ -1,0 +1,24 @@
+[Unit]
+Description=Second Brain MCP server
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=second-brain
+Group=second-brain
+WorkingDirectory=/opt/second-brain
+EnvironmentFile=/etc/second-brain/credentials.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/second-brain/.venv/bin/second-brain --config /etc/second-brain/config.yaml serve
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/second-brain
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+ollama_base_url: http://127.0.0.1:11434
+database_path: ~/.local/share/second-brain/conversations.sqlite3
+host: 127.0.0.1
+port: 8000
+default_profile: 32k
+profiles:
+  4k: {model: SET_FROM_OLLAMA_LIST, context_tokens: 4096}
+  32k: {model: SET_FROM_OLLAMA_LIST, context_tokens: 32768}
+  128k: {model: SET_FROM_OLLAMA_LIST, context_tokens: 131072}
+  256k: {model: SET_FROM_OLLAMA_LIST, context_tokens: 262144}
+allowed_models: {}
+limits:
+  request_bytes: 262144
+  response_bytes: 262144
+  question_chars: 32000
+  context_chars: 100000
+  completion_tokens: 2048
+  concurrency: 1
+  queue_depth: 4
+  request_timeout_seconds: 300
+  connect_timeout_seconds: 5
+  requests_per_minute: 60
+token_env:
+  codex: CODEX_MCP_TOKEN
+  claude-code: CLAUDE_CODE_MCP_TOKEN
+# Store secrets in the environment, never in this file.
+log_level: INFO
