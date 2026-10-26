@@ -98,9 +98,11 @@
   - Evidence required: the three-rotations test fails on `ad85cdb` (`FileExistsError`).
   - Evidence (fail first): `tests/integration/test_credential_rotation.py` on the unfixed script: `test_three_consecutive_rotations_keep_previous_tokens_in_backup` failed with `FileExistsError` on the second rotation; the other three also failed.
   - Evidence (after fix): `scripts/init_credentials.py` stages every new file and backup before replacing anything, replaces `.bak` atomically, rewrites only the two token lines, restores earlier targets if a later replacement fails, and exits 1 with a one-line message. All 4 rotation tests pass (including `test_failed_replacement_restores_already_rotated_files`, which injects a replace failure), plus the existing rotation/old-token test; full suite 181 passed, 1 skipped. A manual smoke run showed a clean exit 1 for a missing file and two consecutive successful rotations.
-- [ ] **RM2-017** Let `auth_headers.py` accept any valid principal name, requiring `--env-var` for names other than `codex` and `claude-code` (R2-19).
+- [x] **RM2-017** Let `auth_headers.py` accept any valid principal name, requiring `--env-var` for names other than `codex` and `claude-code` (R2-19).
   - Test: `chatgpt --env-var CHATGPT_MCP_TOKEN` prints the header; `chatgpt` alone exits 2 with the required message; an invalid name exits 2.
   - Evidence required: the `chatgpt --env-var` test fails on `ad85cdb` (invalid choice).
+  - Evidence (fail first): on the unfixed helper `test_auth_header_helper_accepts_other_principal_with_env_var` failed with `invalid choice: 'chatgpt' (choose from codex, claude-code)`.
+  - Evidence (after fix): `deploy/auth_headers.py` validates the name against `[a-z][a-z0-9-]{0,31}` and requires `--env-var` for names outside the default map (argparse error, exit 2). The three new tests in `tests/security/test_auth_headers.py` pass; full suite 184 passed, 1 skipped.
 - [ ] **RM2-018** Add `proxy_set_header Authorization "";` plus an explanatory comment to `deploy/reverse-proxy.example` (R2-20).
   - Test: the R2-20 assertions on the `location = /mcp` block.
   - Evidence required: the test fails on `ad85cdb` (no Authorization clearing).

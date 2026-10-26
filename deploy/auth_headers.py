@@ -15,9 +15,13 @@ TOKEN_ENV = {"codex": "CODEX_MCP_TOKEN", "claude-code": "CLAUDE_CODE_MCP_TOKEN"}
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("principal", choices=tuple(TOKEN_ENV))
+    parser.add_argument("principal")
     parser.add_argument("--env-var")
     args = parser.parse_args()
+    if not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", args.principal):
+        parser.error("principal must be a lowercase name such as codex")
+    if args.env_var is None and args.principal not in TOKEN_ENV:
+        parser.error(f"--env-var is required for principal {args.principal}")
     env_name = args.env_var or TOKEN_ENV[args.principal]
     if not re.fullmatch(r"[A-Z_][A-Z0-9_]*", env_name):
         print("environment variable name is invalid", file=sys.stderr)
