@@ -171,14 +171,8 @@ def test_example_config_fails_only_on_placeholders() -> None:
     assert "conflicting" not in str(exc_info.value)
 
 
-@pytest.mark.parametrize(
-    "tags",
-    [
-        ["shared:tag"] * 4,
-        ["tag:4k", "tag:32k", "tag:128k", "tag:256k"],
-    ],
-)
-def test_example_config_with_real_tags_loads(tmp_path: Path, tags: list[str]) -> None:
+def test_example_config_with_distinct_tags_loads(tmp_path: Path) -> None:
+    tags = ["tag:4k", "tag:32k", "tag:128k", "tag:256k"]
     text = EXAMPLE_CONFIG.read_text(encoding="utf-8")
     for tag in tags:
         text = text.replace("SET_FROM_OLLAMA_LIST", tag, 1)
@@ -186,6 +180,23 @@ def test_example_config_with_real_tags_loads(tmp_path: Path, tags: list[str]) ->
     config_path.write_text(text, encoding="utf-8")
     config = load_config(config_path)
     assert [profile.model for profile in config.profiles.values()] == tags
+
+
+def test_rejects_one_tag_shared_by_profiles() -> None:
+    shared = {
+        name: ModelProfile(model="shared:tag", context_tokens=budget)
+        for name, budget in {
+            "4k": 4096,
+            "32k": 32768,
+            "128k": 131072,
+            "256k": 262144,
+        }.items()
+    }
+    with pytest.raises(ValueError) as exc_info:
+        AppConfig(profiles=shared)
+    message = str(exc_info.value)
+    assert "model tag 'shared:tag' is mapped by profiles 4k, 32k, 128k, 256k" in message
+    assert "ignore the request's num_ctx" in message
 
 
 @pytest.mark.parametrize("tag", ["SET_FROM_OLLAMA_LIST", "REPLACE_WITH_TAG_4K"])
@@ -198,17 +209,8 @@ def test_rejects_placeholder_tags(tag: str) -> None:
         AppConfig(profiles=_valid_profiles(), allowed_models={tag: 8192})
 
 
-def test_allowed_model_sharing_profile_tag_must_match_one_profile_budget() -> None:
-    shared = {
-        name: ModelProfile(model="shared:tag", context_tokens=budget)
-        for name, budget in {
-            "4k": 4096,
-            "32k": 32768,
-            "128k": 131072,
-            "256k": 262144,
-        }.items()
-    }
-    config = AppConfig(profiles=shared, allowed_models={"shared:tag": 32768})
-    assert config.allowed_models["shared:tag"].context_tokens == 32768
+def test_allowed_model_sharing_profile_tag_must_use_profile_budget() -> None:
+    config = AppConfig(profiles=_valid_profiles(), allowed_models={"b": 32768})
+    assert config.allowed_models["b"].context_tokens == 32768
     with pytest.raises(ValueError, match="different allowed-model budget"):
-        AppConfig(profiles=shared, allowed_models={"shared:tag": 8192})
+        AppConfig(profiles=_valid_profiles(), allowed_models={"b": 8192})

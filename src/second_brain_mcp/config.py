@@ -155,7 +155,7 @@ class AppConfig(StrictModel):
                 "model tag placeholders must be replaced with exact names from "
                 "`ollama list`"
             )
-        profile_tags: dict[str, set[int]] = {}
+        profiles_by_tag: dict[str, list[str]] = {}
         for name, profile in self.profiles.items():
             completion = profile.completion_tokens or self.limits.completion_tokens
             _validate_budget(
@@ -163,14 +163,24 @@ class AppConfig(StrictModel):
                 completion,
                 f"profile {name}",
             )
-            profile_tags.setdefault(profile.model, set()).add(profile.context_tokens)
+            profiles_by_tag.setdefault(profile.model, []).append(name)
+        for tag, names in profiles_by_tag.items():
+            if len(names) > 1:
+                raise ValueError(
+                    f"model tag {tag!r} is mapped by profiles {', '.join(names)}; "
+                    "some models ignore the request's num_ctx, so each profile "
+                    "needs its own model variant with that context window"
+                )
+        profile_tags = {
+            profile.model: profile.context_tokens for profile in self.profiles.values()
+        }
         for tag, selection in self.allowed_models.items():
             completion = selection.completion_tokens or self.limits.completion_tokens
             _validate_budget(selection.context_tokens, completion, f"model {tag}")
-            profile_budgets = profile_tags.get(tag)
+            profile_budget = profile_tags.get(tag)
             if (
-                profile_budgets is not None
-                and selection.context_tokens not in profile_budgets
+                profile_budget is not None
+                and profile_budget != selection.context_tokens
             ):
                 raise ValueError(
                     f"model tag {tag!r} has a different allowed-model budget; "
