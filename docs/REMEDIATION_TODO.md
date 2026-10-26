@@ -96,6 +96,21 @@
 
 **Gate R1:** All twelve review bugs have regression tests that failed before the fix and pass after; every tool error matches `<code>: <message>`.
 
+- Note (RM2-005, 2026-10-26): fail-first evidence, from running the current regression tests in a temporary worktree at `ca3a444` (worktree removed afterwards):
+  - Bug 1 (revoked or remapped selection): `test_continuation_rejects_revoked_direct_model`, `test_continuation_uses_current_profile_mapping_and_budget` — not runnable at `ca3a444`: `tests/unit/test_service.py` imports `second_brain_mcp.errors`, which did not exist yet.
+  - Bug 2 (selection persisted on failure): `test_failed_selection_change_does_not_modify_conversation`, `test_busy_continuation_does_not_change_selection` — not runnable at `ca3a444`: `tests/unit/test_service.py` imports `second_brain_mcp.errors`, which did not exist yet.
+  - Bug 3 (malformed inventory): `test_inventory_skips_invalid_entries_and_normalizes_optional_fields` — failed at `ca3a444` with `AttributeError: 'NoneType' object has no attribute 'get'`. `test_ask_handler_sanitizes_unexpected_exceptions` — not runnable at `ca3a444`: `tests/integration/test_server.py` imports `store.ModelSelection`, which did not exist yet.
+  - Bug 4 (non-ASCII token gives 500): `test_malformed_authorization_headers_return_401` — not runnable at `ca3a444`: `tests/integration/test_server.py` imports `store.ModelSelection`, which did not exist yet.
+  - Bug 5 (request ID): `test_request_ids_are_server_generated_for_same_rpc_id` — not runnable at `ca3a444`: `tests/integration/test_server.py` imports `store.ModelSelection`, which did not exist yet.
+  - Bug 6 (inventory truncation): `test_ask_accepts_installed_tag_beyond_inventory_display_limit` — not runnable at `ca3a444`: `tests/unit/test_service.py` imports `second_brain_mcp.errors`, which did not exist yet.
+  - Bug 7 (budget ≤ reserve accepted): `test_rejects_allowed_model_smaller_than_default_completion_reserve` — failed at `ca3a444` (`DID NOT RAISE ValueError`).
+  - Bug 8 (read outside lock): `test_later_continuation_reads_selection_after_lock` — not runnable at `ca3a444`: `tests/unit/test_service.py` imports `second_brain_mcp.errors`, which did not exist yet.
+  - Bug 9 (locks and queue): `test_conversation_locks_are_removed_after_many_asks`, `test_admission_limit_rejects_before_backend_or_database_write` — not runnable at `ca3a444`: `tests/unit/test_service.py` imports `second_brain_mcp.errors`, which did not exist yet.
+  - Bug 10 (connections not closed): `test_store_closes_every_opened_connection` — not runnable at `ca3a444`: `tests/unit/test_store.py` imports `second_brain_mcp.errors`, which did not exist yet.
+  - Bug 11 (non-atomic migration): `test_migration_failure_rolls_back_version_and_added_columns`, `test_partially_migrated_v1_schema_migrates_idempotently` — not runnable at `ca3a444`: `tests/unit/test_store.py` imports `second_brain_mcp.errors`, which did not exist yet.
+  - Bug 12 (`log_level` unvalidated): `test_normalizes_log_level_and_validates_inventory_cache` — failed at `ca3a444` (`assert 'warning' == 'WARNING'`).
+  - Summary: 3 of 12 bugs have fail-first evidence from the regression tests; 9 cannot be shown this way. Bugs 1, 2, 3, 4 and 7 were also reproduced against the pre-fix code by ad hoc probes during the first review, but those probes are not committed tests. The gate's "failed before the fix" clause is therefore met for bugs 3, 7 and 12 only.
+
 ## Phase R2 — Interface, budgeting, and logging (P0)
 
 - [x] **RM-030** Use `Literal` types for `mode` and `model_profile` so the published schema has `enum` arrays (R-14).
