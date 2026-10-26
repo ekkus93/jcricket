@@ -138,18 +138,6 @@ class ConversationStore:
                 db.execute("PRAGMA user_version = 2")
                 db.commit()
 
-    def create(
-        self, principal: str, model_profile: str | None, model: str, budget: int
-    ) -> Conversation:
-        conversation_id = secrets.token_urlsafe(24)
-        now = _now()
-        with self._lock, self._connection() as db:
-            db.execute(
-                "INSERT INTO conversations VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (conversation_id, principal, model_profile, model, budget, now, now),
-            )
-        return Conversation(conversation_id, principal, model_profile, model, budget)
-
     def get(self, principal: str, conversation_id: str) -> Conversation | None:
         with self._connection() as db:
             row = db.execute(
@@ -178,55 +166,6 @@ class ConversationStore:
                 (conversation_id,),
             ).fetchall()
         return [Turn(**dict(row)) for row in rows]
-
-    def add_turn(
-        self,
-        conversation_id: str,
-        question: str,
-        context: str | None,
-        answer: str,
-        mode: str,
-        model_profile: str | None,
-        model: str,
-        budget: int,
-    ) -> None:
-        now = _now()
-        with self._lock, self._connection() as db:
-            db.execute("BEGIN IMMEDIATE")
-            db.executemany(
-                "INSERT INTO messages(conversation_id, role, content, "
-                "context_text, mode, model_profile, model_tag, "
-                "context_limit_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [
-                    (
-                        conversation_id,
-                        "user",
-                        question,
-                        context,
-                        mode,
-                        model_profile,
-                        model,
-                        budget,
-                        now,
-                    ),
-                    (
-                        conversation_id,
-                        "assistant",
-                        answer,
-                        None,
-                        mode,
-                        model_profile,
-                        model,
-                        budget,
-                        now,
-                    ),
-                ],
-            )
-            db.execute(
-                "UPDATE conversations SET updated_at = ? WHERE id = ?",
-                (now, conversation_id),
-            )
-            db.commit()
 
     def record_turn(
         self,
@@ -308,16 +247,6 @@ class ConversationStore:
             )
             db.commit()
         return conversation_id
-
-    def update_selection(
-        self, conversation_id: str, profile: str | None, model: str, budget: int
-    ) -> None:
-        with self._lock, self._connection() as db:
-            db.execute(
-                "UPDATE conversations SET model_profile = ?, model_tag = ?, "
-                "context_limit_tokens = ?, updated_at = ? WHERE id = ?",
-                (profile, model, budget, _now(), conversation_id),
-            )
 
     def list(self, principal: str | None = None) -> list[dict[str, Any]]:
         with self._connection() as db:

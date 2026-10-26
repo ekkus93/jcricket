@@ -119,11 +119,17 @@ def test_migration_failure_rolls_back_version_and_added_columns(
 
 def test_complete_turn_stores_model_and_context_metadata(tmp_path: Path) -> None:
     store = ConversationStore(tmp_path / "db.sqlite3")
-    conversation = store.create("codex", "32k", "tag", 32768)
-    store.add_turn(
-        conversation.id, "question", "facts", "answer", "critic", "32k", "tag", 32768
+    conversation_id = store.record_turn(
+        "codex",
+        None,
+        ModelSelection("32k", "tag", 32768),
+        "question",
+        "facts",
+        "answer",
+        "critic",
+        new_conversation=True,
     )
-    turns = store.history(conversation.id)
+    turns = store.history(conversation_id)
     assert [turn.role for turn in turns] == ["user", "assistant"]
     assert turns[0].context_text == "facts"
     assert turns[0].model_tag == "tag"
@@ -240,7 +246,7 @@ def test_record_turn_rolls_back_new_conversation_on_insert_failure(
 
 
 def test_store_closes_every_opened_connection(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    make_conversation, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = ConversationStore(tmp_path / "connection-count.sqlite3")
     opened = 0
@@ -260,10 +266,9 @@ def test_store_closes_every_opened_connection(
         return original_connect(*args, **kwargs)
 
     monkeypatch.setattr(sqlite3, "connect", connect)
-    first = store.create("codex", "32k", "tag", 32768)
+    first = make_conversation(store)
     store.get("codex", first.id)
     store.history(first.id)
-    store.add_turn(first.id, "q", None, "a", "discuss", "32k", "tag", 32768)
     store.record_turn(
         "codex",
         first.id,
@@ -280,7 +285,7 @@ def test_store_closes_every_opened_connection(
 
 
 def test_sqlite_write_contention_rolls_back_cleanly(
-    tmp_path: Path, monkeypatch
+    make_conversation, tmp_path: Path, monkeypatch
 ) -> None:
     path = tmp_path / "contention.sqlite3"
     store = ConversationStore(path)
@@ -296,7 +301,7 @@ def test_sqlite_write_contention_rolls_back_cleanly(
     blocker.execute("BEGIN IMMEDIATE")
     try:
         with pytest.raises(sqlite3.OperationalError, match="locked"):
-            store.create("codex", "32k", "tag", 32768)
+            make_conversation(store)
     finally:
         blocker.rollback()
         blocker.close()

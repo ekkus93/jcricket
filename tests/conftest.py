@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from second_brain_mcp.config import AppConfig, ModelProfile
+from second_brain_mcp.store import Conversation, ConversationStore, ModelSelection
 
 MODEL_TAGS = {
     "4k": "qwen:4k",
@@ -81,3 +82,32 @@ async def mock_ollama() -> AsyncIterator[httpx.AsyncClient]:
         transport=httpx.MockTransport(handler), base_url="http://ollama.test"
     ) as client:
         yield client
+
+
+DEFAULT_SELECTION = ModelSelection("32k", "tag", 32768)
+
+
+@pytest.fixture
+def make_conversation():
+    """Create a conversation with one complete turn through ``record_turn``."""
+
+    def make(
+        store: ConversationStore,
+        principal: str = "codex",
+        selection: ModelSelection = DEFAULT_SELECTION,
+    ) -> Conversation:
+        conversation_id = store.record_turn(
+            principal,
+            None,
+            selection,
+            "seed question",
+            None,
+            "seed answer",
+            "discuss",
+            new_conversation=True,
+        )
+        conversation = store.get(principal, conversation_id)
+        assert conversation is not None
+        return conversation
+
+    return make

@@ -31,10 +31,10 @@ def _config(path: Path, retention_days: int | None = 30) -> AppConfig:
 
 
 def test_purge_requires_confirmation_and_confirmation_flag(
-    tmp_path: Path, monkeypatch, capsys
+    make_conversation, tmp_path: Path, monkeypatch, capsys
 ) -> None:
     store = ConversationStore(tmp_path / "db.sqlite3")
-    conversation = store.create("codex", "32k", "tag", 32768)
+    conversation = make_conversation(store)
     cutoff_date = (datetime.now(UTC) - timedelta(days=2)).isoformat()
     with store.connect() as db:
         db.execute(
@@ -58,10 +58,12 @@ def test_purge_requires_confirmation_and_confirmation_flag(
     assert store.list() == []
 
 
-def test_purge_uses_configured_retention(tmp_path: Path, capsys) -> None:
+def test_purge_uses_configured_retention(
+    make_conversation, tmp_path: Path, capsys
+) -> None:
     config = _config(tmp_path / "db.sqlite3", retention_days=7)
     store = ConversationStore(config.database_path)
-    conversation = store.create("codex", "32k", "tag", 32768)
+    conversation = make_conversation(store)
     old = (datetime.now(UTC) - timedelta(days=8)).isoformat()
     with store.connect() as db:
         db.execute(
@@ -157,10 +159,12 @@ def test_list_filter_show_unknown_and_delete_paths(tmp_path: Path, capsys) -> No
     assert store.get_any(claude_id) is not None
 
 
-def test_eof_at_delete_confirmation_is_cancelled(tmp_path: Path, monkeypatch) -> None:
+def test_eof_at_delete_confirmation_is_cancelled(
+    make_conversation, tmp_path: Path, monkeypatch
+) -> None:
     config = _config(tmp_path / "db.sqlite3")
     store = ConversationStore(config.database_path)
-    conversation = store.create("codex", "32k", "tag", 32768)
+    conversation = make_conversation(store)
 
     class InteractiveInput:
         def isatty(self):

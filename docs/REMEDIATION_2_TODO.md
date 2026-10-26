@@ -122,8 +122,9 @@
 - [x] **RM2-021** Add the error-code-to-log-level map to `errors.py` and use it in both handlers and the `call_tool` override (R2-21).
   - Test: one code from each level row is logged at the mapped level.
   - Evidence: `ERROR_LOG_LEVELS` in `src/second_brain_mcp/errors.py` covers all eleven codes (`test_every_error_code_has_a_log_level`); both handlers and `SecondBrainMCP.call_tool` log through it. `test_error_log_level_follows_category` checks `invalid_input` at INFO, `ollama_unavailable` at WARNING, `internal_error` at ERROR through real MCP calls; it failed before the change (`assert 40 == 20`). Full suite 190 passed, 1 skipped.
-- [ ] **RM2-022** Delete `ConversationStore.create`, `add_turn`, and `update_selection`; migrate tests to `record_turn` or a `conftest.py` helper (R2-22).
+- [x] **RM2-022** Delete `ConversationStore.create`, `add_turn`, and `update_selection`; migrate tests to `record_turn` or a `conftest.py` helper (R2-22).
   - Acceptance: `grep -rnE "\.create\(|add_turn|update_selection" src tests` finds no `ConversationStore` uses; the full suite passes.
+  - Evidence: `create`, `add_turn`, and `update_selection` removed from `src/second_brain_mcp/store.py`; tests now use `record_turn` directly or the `make_conversation` fixture in `tests/conftest.py`. The acceptance grep returns no matches; full suite 190 passed, 1 skipped.
 - [ ] **RM2-023** Add the subprocess uvicorn access-log leakage test (R2-23).
   - Test: no question, context, or token marker appears in captured server output; the test runs under plain pytest without Ollama in under 30 seconds.
 - [ ] **RM2-024** Add the cancelled-ask lock-cleanup cases (R2-14).
