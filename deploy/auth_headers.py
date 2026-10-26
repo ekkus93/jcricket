@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
+import re
 import stat
 import sys
 from pathlib import Path
@@ -12,8 +14,13 @@ TOKEN_ENV = {"codex": "CODEX_MCP_TOKEN", "claude-code": "CLAUDE_CODE_MCP_TOKEN"}
 
 
 def main() -> int:
-    if len(sys.argv) != 2 or sys.argv[1] not in TOKEN_ENV:
-        print("usage: auth_headers.py codex|claude-code", file=sys.stderr)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("principal", choices=tuple(TOKEN_ENV))
+    parser.add_argument("--env-var")
+    args = parser.parse_args()
+    env_name = args.env_var or TOKEN_ENV[args.principal]
+    if not re.fullmatch(r"[A-Z_][A-Z0-9_]*", env_name):
+        print("environment variable name is invalid", file=sys.stderr)
         return 2
     credential_path = Path(
         os.environ.get(
@@ -26,7 +33,7 @@ def main() -> int:
         if mode & 0o077:
             raise ValueError("credential file permissions must be 600 or stricter")
         values = _read_environment_file(credential_path)
-        token = values.get(TOKEN_ENV[sys.argv[1]], "")
+        token = values.get(env_name, "")
         if len(token) < 32:
             raise ValueError("configured bearer token is missing or too short")
     except (OSError, ValueError) as exc:

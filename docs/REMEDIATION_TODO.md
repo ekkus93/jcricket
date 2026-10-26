@@ -1,6 +1,6 @@
 # Second Brain MCP — Remediation TODO
 
-**Status:** In progress — Phases R0 and R1 complete; remediation phases remain
+**Status:** In progress — Phases R0–R3 complete; remediation phases remain
 **Date:** 2026-10-26  
 **Reference:** [REMEDIATION_SPEC.md](REMEDIATION_SPEC.md) (requirements `R-xx`), [SPEC.md](SPEC.md)  
 **Related:** [TODO.md](TODO.md) (original v0.1 items `SB-xxx`)
@@ -113,24 +113,24 @@
 
 ## Phase R3 — Cleanup, CLI, and operations (P1)
 
-- [ ] **RM-040** Remove the duplicate distinct-token and empty-credentials checks from `server.py`, and the unreachable `/healthz` route (R-40).
+- [x] **RM-040** Remove the duplicate distinct-token and empty-credentials checks from `server.py`, and the unreachable `/healthz` route (R-40).
   - Test: the existing `/healthz` test still passes and also passes with a foreign Host header.
-- [ ] **RM-041** Add the concurrent two-principal propagation test, and set `scope["user"]` with the principal (R-41).
+- [x] **RM-041** Add the concurrent two-principal propagation test, and set `scope["user"]` with the principal (R-41).
   - Test: 20 interleaved `tools/call` requests from both principals each see their own principal (verified through stored conversation ownership).
-- [ ] **RM-042** Pass all security-relevant FastMCP settings explicitly (R-37).
+- [x] **RM-042** Pass all security-relevant FastMCP settings explicitly (R-37).
   - Test: `FASTMCP_DEBUG=true` and `FASTMCP_HOST=0.0.0.0` in the environment do not change the app's settings.
-- [ ] **RM-043** Rebuild the CLI with subparsers; add `get_any`; `delete` confirmation; EOF-safe prompts; admin commands do not need token env vars (R-38).
+- [x] **RM-043** Rebuild the CLI with subparsers; add `get_any`; `delete` confirmation; EOF-safe prompts; admin commands do not need token env vars (R-38).
   - Test: R-51 (14) CLI cases.
-- [ ] **RM-044** Add `retention_days` config, `purge` fallback to it, and the `export` command with `0600` `O_EXCL` output (R-36).
+- [x] **RM-044** Add `retention_days` config, `purge` fallback to it, and the `export` command with `0600` `O_EXCL` output (R-36).
   - Test: purge uses config retention; export writes a `0600` file and refuses to overwrite.
-- [ ] **RM-045** Add `deploy/second-brain-purge.service.example` and `.timer.example` (R-36).
-- [ ] **RM-046** Force a single process (`workers=1`) in `run()` and document it (R-29).
-- [ ] **RM-047** `auth_headers.py --env-var`; `init_credentials.py --rotate` with atomic replacement and a `0600` `.bak` (R-34).
+- [x] **RM-045** Add `deploy/second-brain-purge.service.example` and `.timer.example` (R-36).
+- [x] **RM-046** Force a single process (`workers=1`) in `run()` and document it (R-29).
+- [x] **RM-047** `auth_headers.py --env-var`; `init_credentials.py --rotate` with atomic replacement and a `0600` `.bak` (R-34).
   - Test: helper with `--env-var`; rotate produces new distinct tokens, a `0600` file, and a `0600` backup.
   - Test: the R-34 rotation test (old token gets 401 after rebuild; new token succeeds).
-- [ ] **RM-048** Fix `deploy/reverse-proxy.example`: remove the Host rewrite, stop forwarding `Authorization`, and add the "non-functional until SB-041/SB-042" banner; add validated `trusted_hosts` config used by the middleware and `TransportSecuritySettings` (R-42).
+- [x] **RM-048** Fix `deploy/reverse-proxy.example`: remove the Host rewrite, stop forwarding `Authorization`, and add the "non-functional until SB-041/SB-042" banner; add validated `trusted_hosts` config used by the middleware and `TransportSecuritySettings` (R-42).
   - Test: a `trusted_hosts` entry is accepted as Host; an unlisted host is still rejected; invalid entries (with a scheme, port, or path) fail config validation.
-- [ ] **RM-049** Documentation updates listed in R-39 and R-34: operations, README, local-clients (credential file distinction, error codes, usable input sizes, single process, retention and export, FastMCP environment, `X-Request-ID`, `MAX_LISTED_MODELS`).
+- [x] **RM-049** Documentation updates listed in R-39 and R-34: operations, README, local-clients (credential file distinction, error codes, usable input sizes, single process, retention and export, FastMCP environment, `X-Request-ID`, `MAX_LISTED_MODELS`).
   - Acceptance: each listed topic appears in the named document; no doc claims the helper reads the service credential file.
 
 ## Phase R4 — Test suite completion (P0)
@@ -199,6 +199,8 @@ Populate as work proceeds. Do **not** predeclare success.
 | Fresh-clone install, lint, and tests (RM-003) | Passed | Local fresh clone at baseline commit `80ac1102b25128905731505ce167f96050b8b524`; `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 35 passed, one Starlette/httpx deprecation warning. No Ollama/network service was needed. |
 | Phase R0 checks | Passed | After TODO integrity edits: `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest`: 35 passed, one Starlette/httpx deprecation warning. |
 | Phase R1 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 95 passed, one Starlette/httpx deprecation warning. MCP SDK error wrapper behavior is documented under RM-019. |
+| Phase R2 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 101 passed, one Starlette/httpx deprecation warning. Tests cover enums, prompt budgets, completion overrides, safe usage warnings, request IDs, response headers, and log leakage. |
+| Phase R3 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 113 passed, one Starlette/httpx deprecation warning; `uv run second-brain --help` shows the structured command tree. Tests cover principal isolation, explicit SDK settings, CLI export/retention, credential rotation, single worker, and trusted hosts. systemd was not available for lifecycle testing. |
 | Phase R2 checks | Passed | `uv sync --locked`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`: 101 passed, one Starlette/httpx deprecation warning. Tests cover enum schemas and MCP rejection, estimator framing, profile/direct completion overrides, actionable size errors, warning counts without content, unique request IDs and error headers, and log leakage. |
 | Full R-51 mocked coverage (RM-051) | Not run | — |
 | Opt-in live suite (RM-052) | Not run | — |

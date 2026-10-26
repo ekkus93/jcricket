@@ -1,6 +1,6 @@
-# Example Nginx location for an OAuth-aware reverse proxy deployment.
-# Replace hostnames and certificate paths. Configure the chosen OAuth gateway
-# to validate tokens and map each account to a distinct principal before proxying.
+# NON-FUNCTIONAL until SB-041/SB-042 are complete. This is a deployment sketch only.
+# Local bearer tokens are not remote authentication, and remote Origin policy is
+# not defined. Configure a trusted remote principal design before enabling it.
 server {
     listen 443 ssl http2;
     server_name second-brain.example.invalid;
@@ -11,10 +11,9 @@ server {
     location = /mcp {
         proxy_pass http://127.0.0.1:8000/mcp;
         proxy_http_version 1.1;
-        proxy_set_header Host 127.0.0.1:8000;
+        proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header Authorization $http_authorization;
         proxy_read_timeout 310s;
         proxy_send_timeout 310s;
         proxy_buffering off;

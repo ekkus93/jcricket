@@ -1,0 +1,15 @@
+[Unit]
+Description=Purge expired Second Brain conversations
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=second-brain
+Group=second-brain
+WorkingDirectory=/opt/second-brain
+ExecStart=/opt/second-brain/.venv/bin/second-brain --config /etc/second-brain/config.yaml conversations purge --yes
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/second-brain

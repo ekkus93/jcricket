@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from second_brain_mcp.config import AppConfig, Limits, ModelProfile, load_config
 
@@ -42,6 +43,16 @@ profiles:
     )
     with pytest.raises(ValueError, match="loopback"):
         load_config(config)
+
+
+@pytest.mark.parametrize(
+    "host", ["https://example.com", "example.com:443", "example.com/path"]
+)
+def test_trusted_hosts_must_be_bare_dns_names(host: str, app_config) -> None:
+    values = app_config.model_dump()
+    values["trusted_hosts"] = [host]
+    with pytest.raises(ValidationError, match="bare DNS names"):
+        AppConfig.model_validate(values)
 
 
 def test_credentials_fail_if_any_configured_secret_is_missing(

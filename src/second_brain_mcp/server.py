@@ -13,7 +13,6 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 from starlette.applications import Starlette
-from starlette.responses import JSONResponse
 
 from .auth import LocalAuthMiddleware, current_principal, current_request_id
 from .config import AppConfig
@@ -28,24 +27,25 @@ logger = logging.getLogger(__name__)
 
 def create_app(config: AppConfig) -> Starlette:
     credentials = config.credentials()
-    if not credentials:
-        raise ValueError(
-            "configure bearer tokens through token_env before starting the server"
-        )
-    if len(set(credentials.values())) != len(credentials):
-        raise ValueError("each configured principal must use a distinct token")
     ollama = OllamaClient(config)
     service = SecondBrainService(
         config, ollama, ConversationStore(config.database_path)
     )
     mcp = FastMCP(
         "Second Brain",
+        debug=False,
+        log_level=config.log_level,
         host=config.host,
         port=config.port,
         streamable_http_path="/mcp",
         json_response=True,
         stateless_http=True,
         max_request_body_size=config.limits.request_bytes,
+        session_idle_timeout=1800,
+        max_sessions=10000,
+        warn_on_duplicate_tools=True,
+        warn_on_duplicate_prompts=True,
+        warn_on_duplicate_resources=True,
         transport_security=TransportSecuritySettings(
             allowed_hosts=[
                 config.host,
@@ -56,6 +56,8 @@ def create_app(config: AppConfig) -> Starlette:
                 "127.0.0.1:*",
                 "[::1]",
                 "[::1]:*",
+                *config.trusted_hosts,
+                *(f"{host}:*" for host in config.trusted_hosts),
             ],
             allowed_origins=[
                 "http://localhost",
@@ -64,6 +66,10 @@ def create_app(config: AppConfig) -> Starlette:
                 "http://127.0.0.1:*",
                 "http://[::1]",
                 "http://[::1]:*",
+                *(f"https://{host}" for host in config.trusted_hosts),
+                *(f"https://{host}:*" for host in config.trusted_hosts),
+                *(f"http://{host}" for host in config.trusted_hosts),
+                *(f"http://{host}:*" for host in config.trusted_hosts),
             ],
         ),
     )
@@ -245,14 +251,12 @@ def create_app(config: AppConfig) -> Starlette:
                 await ollama.close()
 
     app.router.lifespan_context = app_lifespan
-    app.add_route(
-        "/healthz", lambda request: JSONResponse({"status": "ok"}), methods=["GET"]
-    )
     app.add_middleware(
         LocalAuthMiddleware,
         credentials=credentials,
         host=config.host,
         requests_per_minute=config.limits.requests_per_minute,
+        trusted_hosts=config.trusted_hosts,
     )
     app.state.mcp_server = mcp
     app.state.service = service
@@ -273,4 +277,5 @@ def run(config: AppConfig) -> None:
         host=config.host,
         port=config.port,
         log_level=config.log_level.lower(),
+        workers=1,
     )

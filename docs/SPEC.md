@@ -285,6 +285,8 @@ Expose a stable MCP endpoint (typically `https://<private-host>/mcp`) through a 
 
 **Do not assume that a static shared bearer token is sufficient for ChatGPT.** Evaluate the *actual* available connection flow and, where applicable, implement OAuth 2.1-compatible MCP protected-resource metadata, authorization-server integration, PKCE, correctly scoped/audience-bound tokens, and token verification. Reuse an existing trustworthy identity provider if it conforms to the current requirements. Do not write a custom OAuth provider solely to meet the MVP if an existing supported solution is available.
 
+The local bearer middleware currently sets both a principal ContextVar and `scope["user"]` (`SimpleUser`). When SB-042 introduces verified remote identities, migrate principal propagation to the SDK `AuthenticatedUser` / `TokenVerifier` path.
+
 ChatGPT custom MCP connectivity is a **product/workspace capability**, separate from server correctness. Verify the account/workspace can register this connection; a secure, working HTTP server alone cannot confer ChatGPT access. ChatGPT end-to-end verification is an acceptance gate and may be a documented external blocker, while local MVP development proceeds.
 
 ### 7.3 Security requirements

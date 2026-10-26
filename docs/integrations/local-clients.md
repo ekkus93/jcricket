@@ -1,6 +1,6 @@
 # Local client setup
 
-The local server exposes Streamable HTTP at `http://127.0.0.1:8000/mcp` and uses independent tokens for `codex` and `claude-code`. Create the private credential file once with `uv run python scripts/init_credentials.py`; it writes `~/.config/second-brain/credentials.env` with mode `0600`. It refuses to overwrite an existing file. Start the server with `scripts/run_local.sh`. The helper reads that private file and emits only the requested bearer header as JSON; it never prints tokens to stderr or a log.
+The local server exposes Streamable HTTP at `http://127.0.0.1:8000/mcp` and uses independent tokens for `codex` and `claude-code`. Create the user credential file once with `uv run python scripts/init_credentials.py`; it writes `~/.config/second-brain/credentials.env` with mode `0600`. It refuses to overwrite an existing file. Start the server with `scripts/run_local.sh`. The helper reads the user credential file and emits only the requested bearer header as JSON; it never prints tokens to stderr or a log. For systemd, `/etc/second-brain/credentials.env` is a separate service credential file, read by systemd and normally owned by `root:second-brain` with mode `0640`. The helper does not read the service file.
 
 ## Codex
 
@@ -10,7 +10,7 @@ Add the server to user configuration with `codex mcp add second-brain --url http
 
 Add the user-scoped server with `claude mcp add-json second-brain '{"type":"http","url":"http://127.0.0.1:8000/mcp","headersHelper":"python3 /absolute/path/to/jcricket/deploy/auth_headers.py claude-code"}' --scope user`. Verify `claude mcp get second-brain` and `/mcp`, then run the same tool and persistence checks in a fresh session.
 
-The CLI helper reads the same credential file used by the system service, so tokens remain outside client configuration and source control. Rotate tokens by updating the private credential file and service environment, restarting the server, and reconnecting each client. Project directories and committed configs must never contain real tokens. If a client reports an authorization failure, verify the helper path, principal name (`codex` or `claude-code`), credential file permissions, and that the service was restarted after rotation. Confirm available models with `list_models` before selecting a profile.
+Rotate local tokens with `uv run python scripts/init_credentials.py --rotate`. It writes a private `.bak` before replacing the user file. If systemd uses the service credential file, include `--service-file /etc/second-brain/credentials.env` (with suitable privileges) so both credential files are rotated together, then restart the service and reconnect each client. Project directories and committed configs must never contain real tokens. If a client reports an authorization failure, verify the helper path, principal name (`codex` or `claude-code`), credential file permissions, and that the service was restarted after rotation. Confirm available models with `list_models` before selecting a profile.
 
 ## ChatGPT (not yet available)
 

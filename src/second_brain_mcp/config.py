@@ -62,6 +62,8 @@ class AppConfig(StrictModel):
     limits: Limits = Field(default_factory=Limits)
     token_env: dict[str, str] = Field(default_factory=dict)
     log_level: str = "INFO"
+    retention_days: int | None = Field(default=None, gt=0)
+    trusted_hosts: list[str] = Field(default_factory=list)
 
     @field_validator("host")
     @classmethod
@@ -69,6 +71,28 @@ class AppConfig(StrictModel):
         if value not in {"127.0.0.1", "::1", "localhost"}:
             raise ValueError("host must be loopback; remote ingress belongs in a proxy")
         return value
+
+    @field_validator("trusted_hosts")
+    @classmethod
+    def validate_trusted_hosts(cls, value: list[str]) -> list[str]:
+        normalized = []
+        for host in value:
+            if (
+                not isinstance(host, str)
+                or len(host) > 253
+                or not re.fullmatch(
+                    r"(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*",
+                    host,
+                )
+            ):
+                raise ValueError(
+                    "trusted_hosts entries must be bare DNS names without "
+                    "scheme, port, or path"
+                )
+            normalized.append(host.lower())
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("trusted_hosts entries must be unique")
+        return normalized
 
     @field_validator("profiles")
     @classmethod

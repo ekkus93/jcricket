@@ -1,7 +1,10 @@
+import asyncio
+import itertools
 import logging
 import sqlite3
 from pathlib import Path
 
+import httpx
 import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
@@ -9,9 +12,14 @@ from starlette.testclient import TestClient
 from second_brain_mcp.auth import LocalAuthMiddleware
 from second_brain_mcp.config import AppConfig, Limits, ModelProfile
 from second_brain_mcp.server import create_app
+from second_brain_mcp.store import ModelSelection
 
 
-def _configured_app(tmp_path: Path, limits: Limits | None = None) -> Starlette:
+def _configured_app(
+    tmp_path: Path,
+    limits: Limits | None = None,
+    trusted_hosts: list[str] | None = None,
+) -> Starlette:
     config = AppConfig(
         database_path=tmp_path / "db.sqlite3",
         limits=limits or Limits(),
@@ -22,6 +30,7 @@ def _configured_app(tmp_path: Path, limits: Limits | None = None) -> Starlette:
             "256k": ModelProfile(model="huge", context_tokens=262144),
         },
         token_env={"codex": "TEST_CODEX_TOKEN", "claude-code": "TEST_CLAUDE_TOKEN"},
+        trusted_hosts=trusted_hosts or [],
     )
     return create_app(config)
 
@@ -141,6 +150,9 @@ def test_auth_is_required_for_mcp_and_health_is_minimal(
     monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
     with TestClient(_configured_app(tmp_path)) as client:
         assert client.get("/healthz").json() == {"status": "ok"}
+        assert client.get("/healthz", headers={"Host": "example.invalid"}).json() == {
+            "status": "ok"
+        }
         denied = client.post(
             "/mcp",
             json={},
@@ -369,6 +381,157 @@ def test_tool_logs_are_correlatable_and_do_not_contain_content(
     assert "request_id=" in records
 
 
+def test_fastmcp_settings_ignore_environment_overrides(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    monkeypatch.setenv("FASTMCP_DEBUG", "true")
+    monkeypatch.setenv("FASTMCP_HOST", "0.0.0.0")
+    app = _configured_app(tmp_path)
+    settings = app.state.mcp_server.settings
+    assert settings.debug is False
+    assert settings.host == "127.0.0.1"
+    assert settings.streamable_http_path == "/mcp"
+    assert settings.stateless_http is True
+
+
+def test_server_runs_one_worker(app_config, monkeypatch) -> None:
+    monkeypatch.setenv("CODEX_MCP_TOKEN", "c" * 32)
+    monkeypatch.setenv("CLAUDE_CODE_MCP_TOKEN", "d" * 32)
+    captured = {}
+    monkeypatch.setattr(
+        "second_brain_mcp.server.uvicorn.run", lambda *a, **kw: captured.update(kw)
+    )
+    from second_brain_mcp.server import run
+
+    run(app_config)
+    assert captured["workers"] == 1
+
+
+def test_configured_trusted_host_is_accepted(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    with TestClient(
+        _configured_app(tmp_path, trusted_hosts=["brain.example"])
+    ) as client:
+        response = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+            headers={
+                "Authorization": "Bearer " + "c" * 32,
+                "Host": "brain.example",
+                "Origin": "https://brain.example",
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+        rejected = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            headers={
+                "Authorization": "Bearer " + "c" * 32,
+                "Host": "other.example",
+                "Origin": "https://other.example",
+            },
+        )
+    assert response.status_code == 200
+    assert rejected.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_concurrent_tool_calls_keep_principal_ownership(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TEST_CODEX_TOKEN", "c" * 32)
+    monkeypatch.setenv("TEST_CLAUDE_TOKEN", "d" * 32)
+    app = _configured_app(tmp_path)
+    sequence = itertools.count()
+
+    async def persist(
+        principal,
+        question,
+        context=None,
+        conversation_id=None,
+        mode="discuss",
+        model_profile=None,
+        model=None,
+    ):
+        identifier = f"owned-{next(sequence)}"
+        selection = ModelSelection("32k", "qwen:32k", 32768)
+        app.state.service.store.record_turn(
+            principal,
+            identifier,
+            selection,
+            question,
+            context,
+            "ok",
+            mode,
+            new_conversation=True,
+        )
+        return {
+            "answer": "ok",
+            "conversation_id": identifier,
+            "mode": mode,
+            "model_profile": "32k",
+            "model": "qwen:32k",
+            "context_limit_tokens": 32768,
+            "history_trimmed": False,
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "elapsed_ms": 1},
+        }
+
+    app.state.service.ask = persist
+    headers = {
+        "codex": {
+            "Authorization": "Bearer " + "c" * 32,
+            "Host": "127.0.0.1",
+            "Origin": "http://127.0.0.1",
+            "Accept": "application/json, text/event-stream",
+        },
+        "claude-code": {
+            "Authorization": "Bearer " + "d" * 32,
+            "Host": "127.0.0.1",
+            "Origin": "http://127.0.0.1",
+            "Accept": "application/json, text/event-stream",
+        },
+    }
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1"
+        ) as client:
+            responses = await asyncio.gather(
+                *[
+                    client.post(
+                        "/mcp",
+                        json={
+                            "jsonrpc": "2.0",
+                            "id": index,
+                            "method": "tools/call",
+                            "params": {
+                                "name": "ask_second_brain",
+                                "arguments": {"question": str(index)},
+                            },
+                        },
+                        headers=headers["codex" if index % 2 == 0 else "claude-code"],
+                    )
+                    for index in range(20)
+                ]
+            )
+    assert all(response.status_code == 200 for response in responses)
+    ids = [
+        response.json()["result"]["structuredContent"]["conversation_id"]
+        for response in responses
+    ]
+    store = app.state.service.store
+    owners = {store.get_any(identifier)["principal"] for identifier in ids}
+    assert owners == {"codex", "claude-code"}
+    assert all(
+        store.get(owner, identifier) is not None
+        for owner in owners
+        for identifier in ids
+        if store.get_any(identifier)["principal"] == owner
+    )
+
+
 @pytest.mark.asyncio
 async def test_authorization_token_with_trailing_newline_is_rejected() -> None:
     async def app(scope, receive, send):
@@ -449,3 +612,30 @@ def test_rate_limit_is_per_principal(tmp_path: Path, monkeypatch) -> None:
             headers=headers,
         )
         assert second.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_authenticated_scope_exposes_principal_in_user() -> None:
+    captured = {}
+
+    async def app(scope, receive, send):
+        captured["user"] = scope.get("user")
+
+    middleware = LocalAuthMiddleware(app, {"codex": "c" * 32}, host="127.0.0.1")
+    scope = {
+        "type": "http",
+        "path": "/mcp",
+        "headers": [
+            (b"host", b"127.0.0.1"),
+            (b"authorization", b"Bearer " + b"c" * 32),
+        ],
+    }
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(_message):
+        pass
+
+    await middleware(scope, receive, send)
+    assert captured["user"].username == "codex"

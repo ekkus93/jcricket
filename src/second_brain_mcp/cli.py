@@ -1,75 +1,134 @@
-"""Command-line entry point for the Second Brain MCP server."""
+"""Command-line entry point for the Second Brain MCP server and admin tools."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from pathlib import Path
+from typing import Any
 
 from .config import load_config
 from .store import ConversationStore
 
 
-def main() -> None:
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="second-brain")
     parser.add_argument("--config", type=Path, default=Path("config.yaml"))
-    parser.add_argument(
-        "command",
-        choices=("serve", "check-config", "conversations"),
-    )
-    parser.add_argument(
-        "action", nargs="?", choices=("list", "show", "delete", "purge")
-    )
-    parser.add_argument("conversation_id", nargs="?")
-    parser.add_argument("--principal")
-    parser.add_argument("--older-than", type=int)
-    parser.add_argument("--yes", action="store_true", help="confirm bulk purge")
-    args = parser.parse_args()
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("serve", help="run the MCP server")
+    commands.add_parser("check-config", help="validate configuration and credentials")
+
+    conversations = commands.add_parser("conversations")
+    actions = conversations.add_subparsers(dest="action", required=True)
+    listing = actions.add_parser("list")
+    listing.add_argument("--principal")
+    for action_name in ("show", "get-any", "delete"):
+        action = actions.add_parser(action_name)
+        action.add_argument("conversation_id")
+        if action_name == "delete":
+            action.add_argument("--yes", action="store_true")
+    purge = actions.add_parser("purge")
+    purge.add_argument("--older-than", type=int)
+    purge.add_argument("--yes", action="store_true")
+    export = actions.add_parser("export")
+    export.add_argument("conversation_id", nargs="?")
+    export.add_argument("--principal")
+    export.add_argument("--output", type=Path)
+    return parser
+
+
+def main() -> None:
+    args = _parser().parse_args()
     config = load_config(args.config)
     if args.command == "check-config":
         config.credentials()
         print("Configuration is valid.")
-        return
-    if args.command == "conversations":
-        _conversations(config.database_path, args)
-        return
-    from .server import run
+    elif args.command == "conversations":
+        _conversations(config, args)
+    else:
+        from .server import run
 
-    run(config)
+        run(config)
 
 
-def _conversations(database_path: Path, args: argparse.Namespace) -> None:
-    if not args.action:
-        raise SystemExit("conversations requires list, show, delete, or purge")
+def _conversations(config: Any, args: argparse.Namespace) -> None:
+    database_path = getattr(config, "database_path", config)
+    retention_days = getattr(config, "retention_days", None)
     store = ConversationStore(database_path)
     if args.action == "list":
         print(json.dumps(store.list(args.principal), indent=2))
-    elif args.action == "show":
-        if not args.conversation_id:
-            raise SystemExit("show requires a conversation ID")
-        conversation = store.list()
-        if not any(row["id"] == args.conversation_id for row in conversation):
+    elif args.action == "get-any":
+        metadata = store.get_any(args.conversation_id)
+        if metadata is None:
             raise SystemExit("conversation not found")
-        print(
-            json.dumps(
-                [turn.__dict__ for turn in store.show(args.conversation_id)], indent=2
-            )
-        )
+        print(json.dumps(metadata, indent=2))
+    elif args.action == "show":
+        metadata = store.get_any(args.conversation_id)
+        if metadata is None:
+            raise SystemExit("conversation not found")
+        print(json.dumps(_export_conversation(store, metadata), indent=2))
     elif args.action == "delete":
-        if not args.conversation_id:
-            raise SystemExit("delete requires a conversation ID")
+        if not args.yes and not _confirm(
+            f"Delete conversation {args.conversation_id}? [y/N] "
+        ):
+            raise SystemExit("Cancelled.")
         if not store.delete(args.conversation_id):
             raise SystemExit("conversation not found")
-    else:
-        if args.older_than is None or args.older_than < 1:
-            raise SystemExit(
-                "purge requires --older-than with a positive number of days"
+    elif args.action == "purge":
+        age = args.older_than if args.older_than is not None else retention_days
+        if age is None or age < 1:
+            raise SystemExit("purge requires --older-than or configured retention_days")
+        if not args.yes and not _confirm(
+            f"Delete conversations older than {age} days? [y/N] "
+        ):
+            raise SystemExit("Cancelled.")
+        print(f"Deleted {store.purge(age)} conversations.")
+    elif args.action == "export":
+        if args.conversation_id:
+            metadata = store.get_any(args.conversation_id)
+            records = (
+                [] if metadata is None else [_export_conversation(store, metadata)]
             )
-        if not args.yes:
-            answer = input(
-                f"Delete conversations older than {args.older_than} days? [y/N] "
-            )
-            if answer.strip().lower() != "y":
-                print("Purge cancelled.")
-                return
-        print(f"Deleted {store.purge(args.older_than)} conversations.")
+        else:
+            records = [
+                _export_conversation(store, item) for item in store.list(args.principal)
+            ]
+        if args.conversation_id and not records:
+            raise SystemExit("conversation not found")
+        payload = json.dumps(records, indent=2) + "\n"
+        if args.output is None:
+            print(payload, end="")
+        else:
+            _create_private_export(args.output, payload)
+
+
+def _export_conversation(
+    store: ConversationStore, metadata: dict[str, Any]
+) -> dict[str, Any]:
+    return {
+        "conversation": metadata,
+        "turns": [turn.__dict__ for turn in store.show(metadata["id"])],
+    }
+
+
+def _create_private_export(path: Path, contents: str) -> None:
+    descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+        output.write(contents)
+    path.chmod(0o600)
+
+
+def _confirm(prompt: str) -> bool:
+    if not sys.stdin.isatty():
+        return False
+    try:
+        answer = input(prompt)
+    except EOFError:
+        return False
+    return answer.strip().lower() == "y"
+
+
+if __name__ == "__main__":
+    main()

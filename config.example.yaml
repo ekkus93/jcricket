@@ -23,5 +23,7 @@ limits:
 token_env:
   codex: CODEX_MCP_TOKEN
   claude-code: CLAUDE_CODE_MCP_TOKEN
+retention_days: null
+trusted_hosts: []
 # Store secrets in the environment, never in this file.
 log_level: INFO

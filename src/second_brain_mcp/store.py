@@ -158,6 +158,17 @@ class ConversationStore:
             ).fetchone()
         return _conversation(row) if row else None
 
+    def get_any(self, conversation_id: str) -> dict[str, Any] | None:
+        """Return conversation metadata for an administrative caller."""
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT id, principal, model_profile, model_tag, "
+                "context_limit_tokens, created_at, updated_at "
+                "FROM conversations WHERE id = ?",
+                (conversation_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
     def history(self, conversation_id: str) -> list[Turn]:
         with self._connection() as db:
             rows = db.execute(

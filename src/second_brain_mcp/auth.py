@@ -10,6 +10,7 @@ from collections import defaultdict, deque
 from contextvars import ContextVar
 from urllib.parse import urlsplit
 
+from starlette.authentication import SimpleUser
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .errors import SecondBrainError
@@ -42,12 +43,19 @@ class LocalAuthMiddleware:
         credentials: dict[str, str],
         host: str,
         requests_per_minute: int = 60,
+        trusted_hosts: list[str] | None = None,
     ) -> None:
         self.app = app
         self.credentials = {
             principal: token.encode("utf-8") for principal, token in credentials.items()
         }
-        self.allowed_hosts = {host, "127.0.0.1", "localhost", "[::1]"}
+        self.allowed_hosts = {
+            host,
+            "127.0.0.1",
+            "localhost",
+            "[::1]",
+            *(trusted_hosts or []),
+        }
         self.requests_per_minute = requests_per_minute
         self._requests: dict[str, deque[float]] = defaultdict(deque)
         self._rate_lock = asyncio.Lock()
@@ -131,6 +139,7 @@ class LocalAuthMiddleware:
             return
         token_context = _current_principal.set(principal)
         try:
+            scope["user"] = SimpleUser(principal)
             await self.app(scope, receive, send)
         finally:
             _current_principal.reset(token_context)
